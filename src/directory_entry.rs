@@ -1,4 +1,5 @@
-pub const DIRENT_SZ: usize = 32;    // 目录项字节数
+pub const DIRENT_SZ: usize = 32; // 目录项字节数
+
 // 目录项 ATTRIBUTE 字节最高两位是保留不用的
 pub const ATTR_READ_ONLY: u8 = 0x01;
 pub const ATTR_HIDDEN: u8 = 0x02;
@@ -7,6 +8,10 @@ pub const ATTR_VOLUME_ID: u8 = 0x08;
 pub const ATTR_DIRECTORY: u8 = 0x10;
 pub const ATTR_ARCHIVE: u8 = 0x20;
 pub const ATTR_LONG_NAME: u8 = (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID);
+pub const ATTR_LONG_NAME_MASK: u8 =
+    (ATTR_READ_ONLY | ATTR_HIDDEN | ATTR_SYSTEM | ATTR_VOLUME_ID | ATTR_DIRECTORY | ATTR_ARCHIVE);
+
+pub const LAST_LONG_ENTRY: u8 = 0x40;
 
 /// 目录项抽象
 enum FileDirectoryEntry {
@@ -34,11 +39,7 @@ struct ShortDirectoryEntry {
 
 impl ShortDirectoryEntry {
     pub fn is_dir(&self) -> bool {
-        if 0 != (self.attribute & ATTR_DIRECTORY) {
-            true
-        } else {
-            false
-        }
+        self.attribute == ATTR_DIRECTORY
     }
     pub fn is_deleted(&self) -> bool {
         self.name[0] == 0xE5
@@ -47,18 +48,10 @@ impl ShortDirectoryEntry {
         self.name[0] == 0x00
     }
     pub fn is_file(&self) -> bool {
-        if (self.attribute & ATTR_DIRECTORY) != 0 {
-            false
-        } else {
-            true
-        }
+        (self.attribute != ATTR_DIRECTORY) && (self.attribute != ATTR_VOLUME_ID)
     }
     pub fn is_long(&self) -> bool {
-        if self.attribute == ATTR_LONG_NAME {
-            true
-        } else {
-            false
-        }
+        self.attribute == ATTR_LONG_NAME
     }
     pub fn attribute(&self) -> u8 {
         self.attribute
@@ -148,6 +141,20 @@ impl ShortDirectoryEntry {
         }
         sum
     }
+    /* 设置当前文件的大小 */
+    // 簇的分配和回收实际要对FAT表操作
+    pub fn set_size(&mut self, size: u32) {
+        self.size = size;
+    }
+
+    pub fn get_size(&self) -> u32 {
+        self.size
+    }
+    /* 设置文件起始簇 */
+    pub fn set_first_cluster(&mut self, cluster: u32) {
+        self.cluster_high = ((cluster & 0xFFFF0000) >> 16) as u16;
+        self.cluster_low = (cluster & 0x0000FFFF) as u16;
+    }
     pub fn as_bytes(&self) -> &[u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, DIRENT_SZ) }
     }
@@ -162,14 +169,14 @@ struct LongDirectoryEntry {
     // 如果是该文件的最后一个长文件名目录项，
     // 则将该目录项的序号与 0x40 进行“或（OR）运算”的结果写入该位置。
     // 长文件名要有\0
-    order: u8,              // 删除时为0xE5
-    name1: [u8; 10],        // 5characters
-    attribute: u8,          // should be 0x0F
+    order: u8,       // 删除时为0xE5
+    name1: [u8; 10], // 5characters
+    attribute: u8,   // should be 0x0F
     type_: u8,
     check_sum: u8,
-    name2: [u8; 12],        // 6characters
+    name2: [u8; 12], // 6characters
     zero: [u8; 2],
-    name3: [u8; 4],         // 2characters
+    name3: [u8; 4], // 2characters
 }
 
 impl LongDirectoryEntry {
@@ -178,6 +185,9 @@ impl LongDirectoryEntry {
     }
     pub fn is_empty(&self) -> bool {
         self.order == 0x00
+    }
+    pub fn is_last(&self) -> bool {
+        (self.order & LAST_LONG_ENTRY) > 0
     }
     pub fn as_bytes(&self) -> &[u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, DIRENT_SZ) }
@@ -195,8 +205,8 @@ impl LongDirectoryEntry {
 
 // 卷标目录项
 struct VolumeLabelEntry {
-    name: [u8; 11],         // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
-    attribute: u8,          // 删除时为0xE5
+    name: [u8; 11], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
+    attribute: u8,  // 删除时为0xE5
     os_reserved: u8,
     entry_reserved_1: [u8; 9],
     modification_time: u16,

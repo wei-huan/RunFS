@@ -1,23 +1,27 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表
-use super::{BlockDevice, BLOCK_SZ, DATA_START_SEC, INFOSEC_CACHE_SZ};
+use super::{BlockDevice, BLOCK_SZ, DATA_END_SEC, DATA_START_SEC, MAX_SEC_SZ, INFOSEC_CACHE_SZ};
 use lazy_static::*;
 use spin::RwLock;
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
+// 在本系统设计中, BlockCache块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {
-    cache: [u8; BLOCK_SZ],
+    cache: Vec<u8>,
     sector_id: usize,
-    block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
     modified: bool,
+    block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
 }
 
 impl BlockCache {
-    pub fn new(sector_id: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
-        assert!(sector_id < DATA_START_SEC);
-        let mut cache = [0u8; BLOCK_SZ];
+    pub fn new(sector_id: usize, sector_size: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
+        assert!((sector_id >= DATA_START_SEC) && (sector_id <= DATA_END_SEC));
+        let mut cache: Vec<u8> = Vec::with_capacity(MAX_SEC_SZ);
         block_dev.read_block(sector_id, &mut cache);
+        // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
+        cache.shrink_to(sector_size);
+        assert!(cache.capacity() == sector_size);
         Self {
             cache,
             sector_id,
@@ -25,10 +29,10 @@ impl BlockCache {
             block_dev: block_dev,
         }
     }
-    pub fn get_cache_ref(&self) -> &[u8; BLOCK_SZ] {
+    pub fn get_cache_ref(&self) -> &[u8] {
         &self.cache
     }
-    pub fn get_cache_mut(&mut self) -> &mut [u8; BLOCK_SZ] {
+    pub fn get_cache_mut(&mut self) -> &mut [u8] {
         &mut self.cache
     }
     pub fn get_ref<T>(&self, offset: usize) -> &T
@@ -69,7 +73,8 @@ impl BlockCache {
     pub fn sync(&mut self) {
         if self.modified {
             self.modified = false;
-            self.block_dev.write_block(self.sector_id, &self.cache);
+            self.block_dev
+                .write_block(self.sector_id, self.cache.as_ref());
         }
     }
 }
@@ -80,6 +85,7 @@ impl Drop for BlockCache {
     }
 }
 
+// 在本系统设计中, 文件系统最小读取单位SectorCache等于硬件最小的分配单元.
 pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
@@ -116,6 +122,7 @@ impl SectorCacheManager {
             }
             // load sector into mem and push back
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
+                512,
                 sector_id,
                 Arc::clone(&block_device),
             )));

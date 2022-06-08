@@ -1,6 +1,7 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
 use super::{
-    BlockDevice, SectorCache, CLUS_SZ, CLU_CACHE_SZ, DATA_START_SEC, SECS_PER_CLU, SEC_SZ,
+    BlockDevice, SectorCache, CLUS_SZ, CLU_CACHE_SZ, DATA_START_SEC, MAX_CLUS_SZ, SECS_PER_CLU,
+    SEC_SZ, START_CLUS_ID,
 };
 use lazy_static::*;
 use spin::RwLock;
@@ -8,26 +9,32 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 pub struct ClusterCache {
-    cache: [u8; CLUS_SZ],
-    cluster_id: usize,               // cluster_id 是数据区的簇号, 从 2 开始标号
-    block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
+    cache: Vec<u8>,
+    cluster_id: usize, // cluster_id 是数据区的簇号, 一般从 2 开始标号
     modified: bool,
+    block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
 }
 
 impl ClusterCache {
-    pub fn new(cluster_id: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
-        assert!(cluster_id >= 2);
-        let mut cache = [0u8; CLUS_SZ];
-        let block_id = (cluster_id - 2) * SECS_PER_CLU + DATA_START_SEC;
-        for (i, id) in (block_id..(block_id + SECS_PER_CLU)).enumerate() {
-            block_dev.read_block(id, &mut cache[(i * SEC_SZ)..((i + 1) * SEC_SZ)]);
-        }
+    pub fn new(cluster_id: usize, cluster_size: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
+        assert!(cluster_id >= START_CLUS_ID);
+        let mut cache: Vec<u8> = Vec::with_capacity(MAX_CLUS_SZ);
+        let block_id = (cluster_id - START_CLUS_ID) * SECS_PER_CLU + DATA_START_SEC;
+        // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
+        cache.shrink_to(cluster_size);
+        assert!(cache.capacity() == cluster_size);
         Self {
             cache,
             cluster_id,
             modified: false,
             block_dev: block_dev,
         }
+    }
+    pub fn get_cache_ref(&self) -> &[u8] {
+        &self.cache
+    }
+    pub fn get_cache_mut(&mut self) -> &mut [u8] {
+        &mut self.cache
     }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
@@ -116,6 +123,7 @@ impl ClusterCacheManager {
             }
             // load cluster into mem and push back
             let cluster_cache = Arc::new(RwLock::new(ClusterCache::new(
+                8192,
                 cluster_id,
                 Arc::clone(&block_device),
             )));
