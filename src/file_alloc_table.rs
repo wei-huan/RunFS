@@ -41,7 +41,7 @@ impl FATEntry {
     // }
 }
 
-// pub struct FATRegion {}
+// pub struct FileAllocTable {}
 
-// impl FATRegion {
+// impl FileAllocTable {
 // }
