@@ -18,9 +18,13 @@ pub struct ClusterCache {
 impl ClusterCache {
     pub fn new(cluster_id: usize, cluster_size: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
         assert!(cluster_id >= START_CLUS_ID);
-        let mut cache: Vec<u8> = Vec::with_capacity(MAX_CLUS_SZ);
+        let mut cache: Vec<u8> = vec![0; MAX_CLUS_SZ];
         let block_id = (cluster_id - START_CLUS_ID) * SECS_PER_CLU + DATA_START_SEC;
+        for (i, id) in (block_id..(block_id + SECS_PER_CLU)).enumerate() {
+            block_dev.read_block(id, &mut cache[(i * SEC_SZ)..((i + 1) * SEC_SZ)]);
+        }
         // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
+        cache.resize_with(cluster_size, Default::default);
         cache.shrink_to(cluster_size);
         assert!(cache.capacity() == cluster_size);
         Self {
@@ -123,8 +127,8 @@ impl ClusterCacheManager {
             }
             // load cluster into mem and push back
             let cluster_cache = Arc::new(RwLock::new(ClusterCache::new(
-                8192,
                 cluster_id,
+                8192,
                 Arc::clone(&block_device),
             )));
             self.queue

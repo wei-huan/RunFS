@@ -13,6 +13,7 @@ use sector_cache::SectorCache;
 pub use block_device::BlockDevice;
 pub use cluster_cache::{data_cache_sync_all, get_data_cache};
 pub use sector_cache::{get_info_cache, info_cache_sync_all};
+pub use runfs::RunFileSystem;
 
 pub const BLOCK_SZ: usize = 0x200;
 pub const SEC_SZ: usize = BLOCK_SZ;
@@ -27,7 +28,8 @@ const FAT_TABLE_SECS: usize = 1969;
 const DBR_START_SEC: usize = 0;
 
 pub const FAT_TABLE_START_SEC: usize = DBR_START_SEC + RESERVE_SEC_SZ;
-pub const DATA_START_SEC: usize = FAT_TABLE_START_SEC + FAT_TABLE_SECS * 2;
+// pub const DATA_START_SEC: usize = FAT_TABLE_START_SEC + FAT_TABLE_SECS * 2;
+pub const DATA_START_SEC: usize = 20;
 pub const DATA_END_SEC: usize = FAT_TABLE_START_SEC + FAT_TABLE_SECS * 2;
 
 // 扇区缓冲区长度

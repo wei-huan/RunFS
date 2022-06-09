@@ -16,12 +16,15 @@ pub struct BlockCache {
 
 impl BlockCache {
     pub fn new(sector_id: usize, sector_size: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
-        assert!((sector_id >= DATA_START_SEC) && (sector_id <= DATA_END_SEC));
-        let mut cache: Vec<u8> = Vec::with_capacity(MAX_SEC_SZ);
+        // assert!((sector_id >= DATA_START_SEC) && (sector_id <= DATA_END_SEC));
+        let mut cache: Vec<u8> = vec![0; MAX_SEC_SZ];
         block_dev.read_block(sector_id, &mut cache);
         // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
+        cache.resize_with(sector_size, Default::default);
         cache.shrink_to(sector_size);
-        assert!(cache.capacity() == sector_size);
+        // println!("cache.len: {}", cache.len());
+        // println!("cache.capacity: {}", cache.capacity());
+        assert!(cache.len() == sector_size);
         Self {
             cache,
             sector_id,
@@ -122,8 +125,8 @@ impl SectorCacheManager {
             }
             // load sector into mem and push back
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
-                512,
                 sector_id,
+                512,
                 Arc::clone(&block_device),
             )));
             self.queue.push_back((sector_id, Arc::clone(&sector_cache)));

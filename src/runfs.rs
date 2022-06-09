@@ -10,7 +10,7 @@ use std::sync::Arc;
 // BPB 79 Byte
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
-pub(crate) struct BiosParameterBlock {
+pub struct BiosParameterBlock {
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
     reserved_sectors: u16,
@@ -234,7 +234,7 @@ pub(crate) struct BootSector {
     bootjmp: [u8; 3],
     oem_name: [u8; 8],
     bpb: BiosParameterBlock, // [u8; 79]
-    boot_code: [u8; 420],
+    boot_code: [u8; 412],
     boot_sig: [u8; 2],
 }
 
@@ -244,7 +244,7 @@ impl Default for BootSector {
             bootjmp: [0; 3],
             oem_name: [0; 8],
             bpb: BiosParameterBlock::default(), // [u8; 79]
-            boot_code: [0; 420],
+            boot_code: [0; 412],
             boot_sig: [0; 2],
         }
     }
@@ -261,7 +261,7 @@ impl BootSector {
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
-pub(crate) struct FSInfo {
+pub struct FSInfo {
     free_cluster_count: u32,
     next_free_cluster: u32,
 }
@@ -337,8 +337,11 @@ pub struct RunFileSystem {
 }
 
 impl RunFileSystem {
-    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+    pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        println!("size of BiosParameterBlock: {}", core::mem::size_of::<BiosParameterBlock>());
+        println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
         let boot_sector = BootSector::new(Arc::clone(&block_device));
+        println!("BootSector: {:#X?}", boot_sector);
         let bpb = boot_sector.bpb;
         bpb.validate();
         let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
@@ -350,4 +353,14 @@ impl RunFileSystem {
             block_device, // root_dir: (),
         }
     }
+    pub fn bpb(&self) -> BiosParameterBlock {
+        self.bpb
+    }
+    pub fn fsinfo(&self) -> FSInfo {
+        self.fsinfo
+    }
 }
+
+// #[cfg(test)]
+// mod tests {
+// }
