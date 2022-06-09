@@ -1,4 +1,4 @@
-pub const DIRENT_SZ: usize = 32; // 目录项字节数
+pub(crate) const DIRENT_SZ: u32 = 32; // 目录项字节数
 
 // 目录项 ATTRIBUTE 字节最高两位是保留不用的
 pub const ATTR_READ_ONLY: u8 = 0x01;
@@ -21,7 +21,7 @@ enum FileDirectoryEntry {
 }
 
 // 短目录项,也适用于当前目录项和上级目录项
-struct ShortDirectoryEntry {
+pub(crate) struct ShortDirectoryEntry {
     name: [u8; 8], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
     extension: [u8; 3],
     attribute: u8, //可以用于判断是目录还是文件或者卷标
@@ -156,10 +156,20 @@ impl ShortDirectoryEntry {
         self.cluster_low = (cluster & 0x0000FFFF) as u16;
     }
     pub fn as_bytes(&self) -> &[u8] {
-        unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, DIRENT_SZ) }
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const _ as usize as *const u8,
+                DIRENT_SZ.try_into().unwrap(),
+            )
+        }
     }
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
-        unsafe { core::slice::from_raw_parts_mut(self as *mut _ as usize as *mut u8, DIRENT_SZ) }
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self as *mut _ as usize as *mut u8,
+                DIRENT_SZ.try_into().unwrap(),
+            )
+        }
     }
 }
 
@@ -190,10 +200,20 @@ impl LongDirectoryEntry {
         (self.order & LAST_LONG_ENTRY) > 0
     }
     pub fn as_bytes(&self) -> &[u8] {
-        unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, DIRENT_SZ) }
+        unsafe {
+            core::slice::from_raw_parts(
+                self as *const _ as usize as *const u8,
+                DIRENT_SZ.try_into().unwrap(),
+            )
+        }
     }
     pub fn as_bytes_mut(&mut self) -> &mut [u8] {
-        unsafe { core::slice::from_raw_parts_mut(self as *mut _ as usize as *mut u8, DIRENT_SZ) }
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self as *mut _ as usize as *mut u8,
+                DIRENT_SZ.try_into().unwrap(),
+            )
+        }
     }
     pub fn get_order(&self) -> u8 {
         self.order
@@ -215,7 +235,7 @@ struct VolumeLabelEntry {
 }
 
 impl VolumeLabelEntry {
-    /*获取短文件名*/
+    /*获取卷名*/
     pub fn get_name(&self) -> String {
         let mut name: String = String::new();
         for i in 0..11 {

@@ -1,10 +1,12 @@
 #![allow(unused)]
 
+mod error;
 mod block_device;
 mod cluster_cache;
 mod file_alloc_table;
 mod sector_cache;
 mod directory_entry;
+mod fat32;
 
 use sector_cache::SectorCache;
 
@@ -30,5 +32,6 @@ pub const DATA_END_SEC: usize = FAT_TABLE_START_SEC + FAT_TABLE_SECS * 2;
 
 // 扇区缓冲区长度
 const INFOSEC_CACHE_SZ: usize = 4;
+
 // 簇缓冲区长度
-const CLU_CACHE_SZ: usize = 4;
+const CLU_CACHE_SZ: usize = 2;
