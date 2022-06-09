@@ -38,6 +38,12 @@ pub struct BiosParameterBlock {
 
 impl BiosParameterBlock {
     const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let bpb: BiosParameterBlock = get_info_cache(0, Arc::clone(&block_device))
+            .read()
+            .read(11, |bpb: &BiosParameterBlock| *bpb);
+        bpb
+    }
     // runfat 最先判断是否是 FAT32 类型文件系统
     fn validate_fat32(&self) -> Result<(), Error> {
         if self.root_entries != 0
@@ -233,8 +239,8 @@ impl BiosParameterBlock {
 pub(crate) struct BootSector {
     bootjmp: [u8; 3],
     oem_name: [u8; 8],
-    bpb: BiosParameterBlock, // [u8; 79]
-    boot_code: [u8; 412],
+    bpb: [u8; 79],
+    boot_code: [u8; 420],
     boot_sig: [u8; 2],
 }
 
@@ -243,20 +249,20 @@ impl Default for BootSector {
         BootSector {
             bootjmp: [0; 3],
             oem_name: [0; 8],
-            bpb: BiosParameterBlock::default(), // [u8; 79]
-            boot_code: [0; 412],
+            bpb: [0; 79], // [u8; 79]
+            boot_code: [0; 420],
             boot_sig: [0; 2],
         }
     }
 }
 
 impl BootSector {
-    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
-            .read()
-            .read(0, |bs: &BootSector| *bs);
-        boot_sector
-    }
+    // fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+    //     let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
+    //         .read()
+    //         .read(0, |bs: &BootSector| *bs);
+    //     boot_sector
+    // }
 }
 
 #[repr(C)]
@@ -267,6 +273,12 @@ pub struct FSInfo {
 }
 
 impl FSInfo {
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let fsinfo: FSInfo = get_info_cache(1, Arc::clone(&block_device))
+            .read()
+            .read(488, |fsinfo: &FSInfo| *fsinfo);
+            fsinfo
+    }
     fn free_cluster(&self) -> u32 {
         self.next_free_cluster
     }
@@ -338,15 +350,20 @@ pub struct RunFileSystem {
 
 impl RunFileSystem {
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        println!("size of BiosParameterBlock: {}", core::mem::size_of::<BiosParameterBlock>());
+        println!(
+            "size of BiosParameterBlock: {}",
+            core::mem::size_of::<BiosParameterBlock>()
+        );
         println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
-        let boot_sector = BootSector::new(Arc::clone(&block_device));
-        println!("BootSector: {:#X?}", boot_sector);
-        let bpb = boot_sector.bpb;
+        // let boot_sector = BootSector::new(Arc::clone(&block_device));
+        // println!("BootSector: {:#X?}", boot_sector);
+        // let bpb = boot_sector.bpb;
+        let bpb = BiosParameterBlock::new(Arc::clone(&block_device));
         bpb.validate();
-        let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
-        fsinfo_sector.validate();
-        let fsinfo = fsinfo_sector.fsinfo;
+        // let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
+        // fsinfo_sector.validate();
+        // let fsinfo = fsinfo_sector.fsinfo;
+        let fsinfo = FSInfo::new(Arc::clone(&block_device));
         Self {
             bpb,
             fsinfo,
