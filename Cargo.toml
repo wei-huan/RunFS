@@ -1,5 +1,5 @@
 [package]
-name = "myfat32"
+name = "RunFS"
 version = "0.1.0"
 authors = ["Haozhe Tang 1520799054@qq.com"]
 edition = "2021"
