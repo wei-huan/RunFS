@@ -85,7 +85,7 @@ impl Drop for BlockCache {
     }
 }
 
-// 在本系统设计中, 文件系统最小读取单位SectorCache等于硬件最小的分配单元.
+// 在本系统设计中, 文件系统最小读取单位 SectorCache 等于硬件最小的分配单元.
 pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {

@@ -2,12 +2,14 @@
 use super::BlockDevice;
 use crate::directory_entry::{ShortDirectoryEntry, DIRENT_SZ};
 use crate::error::Error;
+use crate::sector_cache::get_info_cache;
 use crate::{MAX_CLUS_SZ, START_CLUS_ID};
 use spin::rwlock::RwLock;
 use std::sync::Arc;
 
-// 并不是 BPB 里面全部的信息,有些过时或者不重要的成员没有在里面
-#[derive(Copy, Clone)]
+// BPB 79 Byte
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct BiosParameterBlock {
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
@@ -35,6 +37,7 @@ pub(crate) struct BiosParameterBlock {
 }
 
 impl BiosParameterBlock {
+    const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
     // runfat 最先判断是否是 FAT32 类型文件系统
     fn validate_fat32(&self) -> Result<(), Error> {
         if self.root_entries != 0
@@ -86,7 +89,8 @@ impl BiosParameterBlock {
     }
     // runfat 实现的 FAT32 文件系统簇的字节数必须小于32KB
     fn validate_bytes_per_cluster(&self) -> Result<(), Error> {
-        let bytes_per_cluster: usize = usize::from(self.sectors_per_cluster) * usize::from(self.bytes_per_sector);
+        let bytes_per_cluster: usize =
+            usize::from(self.sectors_per_cluster) * usize::from(self.bytes_per_sector);
         if bytes_per_cluster > MAX_CLUS_SZ {
             println!(
                 "invalid bytes_per_cluster value in BPB: expected value smaller than {} but got {}",
@@ -139,7 +143,7 @@ impl BiosParameterBlock {
     fn validate_total_sectors(&self) -> Result<(), Error> {
         let total_sectors = self.total_sectors_32();
         let first_data_sector = self.first_data_sector();
-        if self.total_sectors_32 == 0{
+        if self.total_sectors_32 == 0 {
             println!("Invalid BPB (total_sectors_32 should be non-zero)");
             return Err(Error::CorruptedFileSystem);
         }
@@ -163,13 +167,13 @@ impl BiosParameterBlock {
         Ok(())
     }
     fn validate_total_clusters(&self) -> Result<(), Error> {
-        const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
         let total_clusters = self.total_clusters();
-        if total_clusters > FAT32_MAX_CLUSTERS {
+        if total_clusters > Self::FAT32_MAX_CLUSTERS {
             println!("Invalid BPB: too many clusters {}", total_clusters);
             return Err(Error::CorruptedFileSystem);
         }
-        let total_fat_entries = self.fats_sectors() * u32::from(self.bytes_per_sector) * 8 / DIRENT_SZ;
+        let total_fat_entries =
+            self.fats_sectors() * u32::from(self.bytes_per_sector) * 8 / DIRENT_SZ;
         let usable_fat_entries: u32 = total_fat_entries - u32::try_from(START_CLUS_ID).unwrap();
         if usable_fat_entries < total_clusters {
             println!(
@@ -222,29 +226,106 @@ impl BiosParameterBlock {
     }
 }
 
-// 本文件系统实现不会改变这个起始扇区,也不能改变起始扇区,因为不具备创建文件系统,扩容等功能
-#[derive(Copy, Clone)]
+// RunFS 全程不会改变这个起始扇区,也不能改变起始扇区,因为不具备创建文件系统,扩容等功能
+// BootSector 也没啥用
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct BootSector {
     bootjmp: [u8; 3],
     oem_name: [u8; 8],
-    bpb: BiosParameterBlock,
-    boot_code: [u8; 448],
+    bpb: BiosParameterBlock, // [u8; 79]
+    boot_code: [u8; 420],
     boot_sig: [u8; 2],
 }
 
-impl BootSector {
-    fn initialize() {}
+impl Default for BootSector {
+    fn default() -> BootSector {
+        BootSector {
+            bootjmp: [0; 3],
+            oem_name: [0; 8],
+            bpb: BiosParameterBlock::default(), // [u8; 79]
+            boot_code: [0; 420],
+            boot_sig: [0; 2],
+        }
+    }
 }
 
+impl BootSector {
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
+            .read()
+            .read(0, |bs: &BootSector| *bs);
+        boot_sector
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct FSInfo {
     free_cluster_count: u32,
     next_free_cluster: u32,
 }
 
 impl FSInfo {
+    fn free_cluster(&self) -> u32 {
+        self.next_free_cluster
+    }
+    fn cluster_count(&self) -> u32 {
+        self.free_cluster_count
+    }
+    fn set_next_free_cluster(&mut self, cluster: u32) {
+        self.next_free_cluster = cluster;
+    }
+    fn set_free_cluster_count(&mut self, free_cluster_count: u32) {
+        self.free_cluster_count = free_cluster_count;
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct FSInfoSector {
+    lead_signature: u32,
+    dummy1: [u8; 480],
+    struc_signature: u32,
+    fsinfo: FSInfo,
+    dummy2: [u8; 12],
+    trail_signature: u32,
+}
+
+impl Default for FSInfoSector {
+    fn default() -> FSInfoSector {
+        FSInfoSector {
+            lead_signature: 0,
+            dummy1: [0; 480],
+            struc_signature: 0,
+            fsinfo: FSInfo::default(),
+            dummy2: [0; 12],
+            trail_signature: 0,
+        }
+    }
+}
+
+impl FSInfoSector {
     const LEAD_SIGNATURE: u32 = 0x4161_5252;
     const STRUC_SIGNATURE: u32 = 0x6141_7272;
     const TRAIL_SIGNATURE: u32 = 0xAA55_0000;
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let fsinfo_sector: FSInfoSector = get_info_cache(0, Arc::clone(&block_device))
+            .read()
+            .read(0, |fs: &FSInfoSector| *fs);
+        fsinfo_sector
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        if self.lead_signature != Self::LEAD_SIGNATURE
+            || self.struc_signature != Self::STRUC_SIGNATURE
+            || self.trail_signature != Self::TRAIL_SIGNATURE
+        {
+            println!("invalid signature in FSInfo");
+            return Err(Error::CorruptedFileSystem);
+        }
+        Ok(())
+    }
 }
 
 // 包括 BPB 和 FSInfo 的信息
@@ -252,5 +333,21 @@ pub struct RunFileSystem {
     bpb: BiosParameterBlock,
     fsinfo: FSInfo,
     block_device: Arc<dyn BlockDevice>,
-    root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
+    // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
+}
+
+impl RunFileSystem {
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let boot_sector = BootSector::new(Arc::clone(&block_device));
+        let bpb = boot_sector.bpb;
+        bpb.validate();
+        let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
+        fsinfo_sector.validate();
+        let fsinfo = fsinfo_sector.fsinfo;
+        Self {
+            bpb,
+            fsinfo,
+            block_device, // root_dir: (),
+        }
+    }
 }
