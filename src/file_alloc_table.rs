@@ -1,6 +1,6 @@
 // FAT 表结构体
-use super::{get_info_cache, BlockDevice, SEC_SZ, SectorCache};
-use std::sync::Arc;
+// use super::{get_info_cache, BlockDevice, SectorCache};
+// use std::sync::Arc;
 
 const END_CLU: u32 = 0x0FFFFFFF;
 const BAD_CLU: u32 = 0xFFFFFFF7;
@@ -8,8 +8,6 @@ const UNUSED_CLU: u32 = 0;
 
 const FAT_ENTRY_BYTES: usize = 4;
 const FAT_ENTRY_WIDTH: usize = 32;
-
-const ENTRYS_PER_SEC: usize = SEC_SZ / FAT_ENTRY_BYTES;
 
 #[repr(C)]
 #[derive(Copy, Clone)]

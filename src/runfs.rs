@@ -1,13 +1,12 @@
 //对文件系统的全局管理.
-use super::BlockDevice;
-use super::{BiosParameterBlock, BootSector, FSInfo, FSInfoSector};
+use super::{BiosParameterBlock, BlockDevice, BootSector, FSInfo, FSInfoSector};
 use std::sync::Arc;
 
 // 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
     pub(crate) bpb: BiosParameterBlock,
     pub(crate) fsinfo: FSInfo,
-    block_device: Arc<dyn BlockDevice>,
+    // block_device: Arc<dyn BlockDevice>,
     // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
@@ -27,19 +26,18 @@ impl RunFileSystem {
             Err(e) => panic!("Bios Parameter Block not valid: {:?}", e),
         }
         let bpb = boot_sector.bpb;
-
-        let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
+        let fsinfo_block_id: usize = bpb.fsinfo_sector().try_into().unwrap();
+        let fsinfo_sector = FSInfoSector::directly_new(fsinfo_block_id, Arc::clone(&block_device));
         let res = fsinfo_sector.validate();
         match res {
             Ok(v) => v,
             Err(e) => panic!("FSInfo Block not valid: {:?}", e),
         }
         let fsinfo = fsinfo_sector.fsinfo;
-        // let fsinfo = FSInfo::new(Arc::clone(&block_device));
         Self {
             bpb,
             fsinfo,
-            block_device, // root_dir: (),
+            // block_device,
         }
     }
     pub fn bpb(&self) -> BiosParameterBlock {

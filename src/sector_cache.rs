@@ -3,7 +3,7 @@ use super::{BlockDevice, RunFileSystem, INFOSEC_CACHE_SZ, MAX_SEC_SZ};
 use lazy_static::*;
 use spin::RwLock;
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 // 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {
@@ -11,7 +11,7 @@ pub struct BlockCache {
     sector_id: usize,
     modified: bool,
     block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
-    file_system: Arc<RunFileSystem>,
+    file_system: Weak<RunFileSystem>,
 }
 
 impl BlockCache {
@@ -22,21 +22,24 @@ impl BlockCache {
     ) -> Self {
         let data_start_sector: usize = runfs.bpb.first_data_sector().try_into().unwrap();
         let sector_size: usize = runfs.bpb.bytes_per_sector().try_into().unwrap();
-        assert!(sector_id < data_start_sector, "sector id not in data range");
+        assert!(sector_id < data_start_sector, "sector id not in info range");
         let mut cache: Vec<u8> = vec![0; MAX_SEC_SZ];
-        block_dev.read_block(sector_id, &mut cache);
+        block_dev.read_block(sector_id, &mut cache).unwrap();
         // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
         cache.resize_with(sector_size, Default::default);
         cache.shrink_to(sector_size);
         // println!("cache.len: {}", cache.len());
         // println!("cache.capacity: {}", cache.capacity());
-        assert!(cache.len() == sector_size);
+        assert!(
+            cache.len() == sector_size,
+            "sector cache len cannot be shrink to proper size"
+        );
         Self {
             cache,
             sector_id,
             modified: false,
             block_dev: block_dev,
-            file_system: runfs,
+            file_system: Arc::downgrade(&runfs),
         }
     }
     pub fn cache_ref(&self) -> &[u8] {
@@ -50,7 +53,14 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let block_size: usize = self.file_system.bpb.bytes_per_sector().try_into().unwrap();
+        let block_size: usize = self
+            .file_system
+            .upgrade()
+            .unwrap()
+            .bpb
+            .bytes_per_sector()
+            .try_into()
+            .unwrap();
         assert!(offset + type_size <= block_size);
         unsafe {
             &*((&self.cache[offset..offset + type_size]).as_ptr() as *const _ as usize as *const T)
@@ -62,7 +72,14 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let block_size: usize = self.file_system.bpb.bytes_per_sector().try_into().unwrap();
+        let block_size: usize = self
+            .file_system
+            .upgrade()
+            .unwrap()
+            .bpb
+            .bytes_per_sector()
+            .try_into()
+            .unwrap();
         assert!(offset + type_size <= block_size);
         self.set_modify();
         unsafe {
@@ -86,7 +103,8 @@ impl BlockCache {
         if self.modified {
             self.modified = false;
             self.block_dev
-                .write_block(self.sector_id, self.cache.as_ref());
+                .write_block(self.sector_id, self.cache.as_ref())
+                .unwrap();
         }
     }
 }
@@ -101,16 +119,19 @@ impl Drop for BlockCache {
 pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
-    file_system: Arc<RunFileSystem>,
+    pub(crate) file_system: Option<Arc<RunFileSystem>>,
     queue: VecDeque<(usize, Arc<RwLock<SectorCache>>)>,
 }
 
 impl SectorCacheManager {
-    pub fn new(runfs: Arc<RunFileSystem>) -> Self {
+    pub fn new() -> Self {
         Self {
-            file_system: runfs,
+            file_system: None,
             queue: VecDeque::new(),
         }
+    }
+    pub fn set_fs(&mut self, runfs: Arc<RunFileSystem>) {
+        self.file_system = Some(runfs);
     }
     pub fn get_cache(
         &mut self,
@@ -138,16 +159,21 @@ impl SectorCacheManager {
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
                 sector_id,
                 Arc::clone(&block_device),
-                Arc::clone(&self.file_system),
+                Arc::clone(self.file_system.as_ref().unwrap()),
             )));
             self.queue.push_back((sector_id, Arc::clone(&sector_cache)));
             sector_cache
         }
     }
+    pub fn info_cache_sync_all(&mut self) {
+        for (_, cache) in self.queue.iter() {
+            cache.write().sync();
+        }
+    }
 }
 
 lazy_static! {
-    pub static ref INFOSEC_CACHE_MANAGER: RwLock<SectorCacheManager> =
+    pub static ref INFO_SEC_CACHE_MANAGER: RwLock<SectorCacheManager> =
         RwLock::new(SectorCacheManager::new());
 }
 
@@ -155,14 +181,15 @@ pub fn get_info_cache(
     sector_id: usize,
     block_device: Arc<dyn BlockDevice>,
 ) -> Arc<RwLock<SectorCache>> {
-    INFOSEC_CACHE_MANAGER
+    INFO_SEC_CACHE_MANAGER
         .write()
         .get_cache(sector_id, block_device)
 }
 
 pub fn info_cache_sync_all() {
-    let manager = INFOSEC_CACHE_MANAGER.write();
-    for (_, cache) in manager.queue.iter() {
-        cache.write().sync();
-    }
+    INFO_SEC_CACHE_MANAGER.write().info_cache_sync_all();
+}
+
+pub fn info_cache_set_fs(runfs: Arc<RunFileSystem>) {
+    INFO_SEC_CACHE_MANAGER.write().set_fs(runfs);
 }

@@ -3,7 +3,6 @@
 use super::BlockDevice;
 use crate::directory_entry::DIRENT_SZ;
 use crate::error::FSError;
-use crate::sector_cache::get_info_cache;
 use crate::{MAX_CLUS_SZ, START_CLUS_ID};
 use std::slice;
 use std::sync::Arc;
@@ -41,12 +40,12 @@ impl BiosParameterBlock {
     const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
 
     #[allow(unused)]
-    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        let bpb: BiosParameterBlock = get_info_cache(0, Arc::clone(&block_device))
-            .read()
-            .read(11, |bpb: &BiosParameterBlock| *bpb);
-        bpb
-    }
+    // fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+    //     let bpb: BiosParameterBlock = get_info_cache(0, Arc::clone(&block_device))
+    //         .read()
+    //         .read(11, |bpb: &BiosParameterBlock| *bpb);
+    //     bpb
+    // }
     // RunFS 最先判断是否是 FAT32 类型文件系统
     fn validate_fat32(&self) -> Result<(), FSError> {
         if self.root_entries != 0
@@ -306,12 +305,12 @@ impl BootSector {
         block_device.read_block(0, sector_slice);
         boot_sector
     }
-    pub(crate) fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
-            .read()
-            .read(0, |bs: &BootSector| *bs);
-        boot_sector
-    }
+    // pub(crate) fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+    //     let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
+    //         .read()
+    //         .read(0, |bs: &BootSector| *bs);
+    //     boot_sector
+    // }
     pub(crate) fn validate(&self) -> Result<(), FSError> {
         if self.boot_sig != [0x55, 0xAA] {
             println!(
