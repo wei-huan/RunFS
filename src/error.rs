@@ -1,4 +1,4 @@
-
+#[derive(Debug)]
 pub enum Error {
     /// A read operation cannot be completed because an end of a file has been reached prematurely.
     UnexpectedEof,

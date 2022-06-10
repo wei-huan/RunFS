@@ -8,7 +8,7 @@ use spin::rwlock::RwLock;
 use std::sync::Arc;
 
 // BPB 79 Byte
-#[repr(C)]
+#[repr(C, packed(1))]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct BiosParameterBlock {
     bytes_per_sector: u16,
@@ -38,19 +38,21 @@ pub struct BiosParameterBlock {
 
 impl BiosParameterBlock {
     const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
+
+    #[allow(unused)]
     fn new(block_device: Arc<dyn BlockDevice>) -> Self {
         let bpb: BiosParameterBlock = get_info_cache(0, Arc::clone(&block_device))
             .read()
             .read(11, |bpb: &BiosParameterBlock| *bpb);
         bpb
     }
-    // runfat 最先判断是否是 FAT32 类型文件系统
+    // RunFS 最先判断是否是 FAT32 类型文件系统
     fn validate_fat32(&self) -> Result<(), Error> {
         if self.root_entries != 0
             || self.total_sectors_16 != 0
             || self.sectors_per_fat_16 != 0
             || self.fs_version != 0
-            || std::str::from_utf8(&self.volume_label[0..8]).unwrap() != "FAT32   "
+            || std::str::from_utf8(&self.fs_type_label).unwrap() != "FAT32   "
         {
             println!("Unsupported filesystem: Not FAT32");
             return Err(Error::CorruptedFileSystem);
@@ -190,6 +192,7 @@ impl BiosParameterBlock {
         Ok(())
     }
     // 验证文件系统是否是合法的FAT32类型
+    #[must_use]
     pub(crate) fn validate(&self) -> Result<(), Error> {
         self.validate_fat32()?;
         self.validate_bytes_per_sector()?;
@@ -203,28 +206,28 @@ impl BiosParameterBlock {
         self.validate_total_clusters()?;
         Ok(())
     }
-    pub(crate) fn fats_sectors(&self) -> u32 {
+    pub fn fats_sectors(&self) -> u32 {
         self.fats_sectors
     }
-    pub(crate) fn total_sectors_32(&self) -> u32 {
+    pub fn total_sectors_32(&self) -> u32 {
         self.total_sectors_32
     }
-    pub(crate) fn reserved_sectors(&self) -> u32 {
+    pub fn reserved_sectors(&self) -> u32 {
         u32::from(self.reserved_sectors)
     }
-    pub(crate) fn root_dir_sectors(&self) -> u32 {
+    pub fn root_dir_sectors(&self) -> u32 {
         let root_dir_bytes = u32::from(self.root_entries) * DIRENT_SZ;
         (root_dir_bytes + u32::from(self.bytes_per_sector) - 1) / u32::from(self.bytes_per_sector)
     }
-    pub(crate) fn sectors_per_all_fats(&self) -> u32 {
+    pub fn sectors_per_all_fats(&self) -> u32 {
         u32::from(self.fats_number) * self.fats_sectors()
     }
-    pub(crate) fn first_data_sector(&self) -> u32 {
+    pub fn first_data_sector(&self) -> u32 {
         let root_dir_sectors = self.root_dir_sectors();
         let fat_sectors = self.sectors_per_all_fats();
         self.reserved_sectors() + fat_sectors + root_dir_sectors
     }
-    pub(crate) fn total_clusters(&self) -> u32 {
+    pub fn total_clusters(&self) -> u32 {
         let total_sectors = self.total_sectors_32();
         let first_data_sector = self.first_data_sector();
         let data_sectors = total_sectors - first_data_sector;
@@ -234,12 +237,12 @@ impl BiosParameterBlock {
 
 // RunFS 全程不会改变这个起始扇区,也不能改变起始扇区,因为不具备创建文件系统,扩容等功能
 // BootSector 也没啥用
-#[repr(C)]
+#[repr(C, packed(1))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct BootSector {
     bootjmp: [u8; 3],
     oem_name: [u8; 8],
-    bpb: [u8; 79],
+    bpb: BiosParameterBlock,
     boot_code: [u8; 420],
     boot_sig: [u8; 2],
 }
@@ -249,7 +252,7 @@ impl Default for BootSector {
         BootSector {
             bootjmp: [0; 3],
             oem_name: [0; 8],
-            bpb: [0; 79], // [u8; 79]
+            bpb: BiosParameterBlock::default(), // [u8; 79]
             boot_code: [0; 420],
             boot_sig: [0; 2],
         }
@@ -257,12 +260,12 @@ impl Default for BootSector {
 }
 
 impl BootSector {
-    // fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-    //     let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
-    //         .read()
-    //         .read(0, |bs: &BootSector| *bs);
-    //     boot_sector
-    // }
+    fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
+            .read()
+            .read(0, |bs: &BootSector| *bs);
+        boot_sector
+    }
 }
 
 #[repr(C)]
@@ -273,21 +276,26 @@ pub struct FSInfo {
 }
 
 impl FSInfo {
+    #[allow(unused)]
     fn new(block_device: Arc<dyn BlockDevice>) -> Self {
         let fsinfo: FSInfo = get_info_cache(1, Arc::clone(&block_device))
             .read()
             .read(488, |fsinfo: &FSInfo| *fsinfo);
             fsinfo
     }
+    #[must_use]
     fn free_cluster(&self) -> u32 {
         self.next_free_cluster
     }
+    #[must_use]
     fn cluster_count(&self) -> u32 {
         self.free_cluster_count
     }
+    #[must_use]
     fn set_next_free_cluster(&mut self, cluster: u32) {
         self.next_free_cluster = cluster;
     }
+    #[must_use]
     fn set_free_cluster_count(&mut self, free_cluster_count: u32) {
         self.free_cluster_count = free_cluster_count;
     }
@@ -321,13 +329,16 @@ impl FSInfoSector {
     const LEAD_SIGNATURE: u32 = 0x4161_5252;
     const STRUC_SIGNATURE: u32 = 0x6141_7272;
     const TRAIL_SIGNATURE: u32 = 0xAA55_0000;
+
+    #[must_use]
     fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        let fsinfo_sector: FSInfoSector = get_info_cache(0, Arc::clone(&block_device))
+        let fsinfo_sector: FSInfoSector = get_info_cache(1, Arc::clone(&block_device))
             .read()
             .read(0, |fs: &FSInfoSector| *fs);
         fsinfo_sector
     }
 
+    #[must_use]
     fn validate(&self) -> Result<(), Error> {
         if self.lead_signature != Self::LEAD_SIGNATURE
             || self.struc_signature != Self::STRUC_SIGNATURE
@@ -349,21 +360,32 @@ pub struct RunFileSystem {
 }
 
 impl RunFileSystem {
+    #[must_use]
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        println!(
-            "size of BiosParameterBlock: {}",
-            core::mem::size_of::<BiosParameterBlock>()
-        );
-        println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
-        // let boot_sector = BootSector::new(Arc::clone(&block_device));
+        // println!(
+        //     "size of BiosParameterBlock: {}",
+        //     core::mem::size_of::<BiosParameterBlock>()
+        // );
+        // println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
+        let boot_sector = BootSector::new(Arc::clone(&block_device));
         // println!("BootSector: {:#X?}", boot_sector);
-        // let bpb = boot_sector.bpb;
-        let bpb = BiosParameterBlock::new(Arc::clone(&block_device));
-        bpb.validate();
-        // let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
-        // fsinfo_sector.validate();
-        // let fsinfo = fsinfo_sector.fsinfo;
-        let fsinfo = FSInfo::new(Arc::clone(&block_device));
+        let bpb = boot_sector.bpb;
+        let res = bpb.validate();
+        match res {
+            Ok(v) => v,
+            Err(e) => panic!("Bios Parameter Block not valid: {:?}", e),
+        }
+        // let bpb = BiosParameterBlock::new(Arc::clone(&block_device));
+        // bpb.validate();
+
+        let fsinfo_sector = FSInfoSector::new(Arc::clone(&block_device));
+        let res = fsinfo_sector.validate();
+        match res {
+            Ok(v) => v,
+            Err(e) => panic!("FSInfo Block not valid: {:?}", e),
+        }
+        let fsinfo = fsinfo_sector.fsinfo;
+        // let fsinfo = FSInfo::new(Arc::clone(&block_device));
         Self {
             bpb,
             fsinfo,
@@ -377,7 +399,3 @@ impl RunFileSystem {
         self.fsinfo
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-// }
