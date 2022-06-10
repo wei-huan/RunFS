@@ -99,7 +99,7 @@ impl ShortDirectoryEntry {
         ((self.cluster_high as u32) << 16) + (self.cluster_low as u32)
     }
     /*获取短文件名*/
-    pub fn get_name(&self) -> String {
+    pub fn name(&self) -> String {
         let mut name: String = String::new();
         for i in 0..8 {
             // 记录文件名
@@ -215,10 +215,10 @@ impl LongDirectoryEntry {
             )
         }
     }
-    pub fn get_order(&self) -> u8 {
+    pub fn order(&self) -> u8 {
         self.order
     }
-    pub fn get_checksum(&self) -> u8 {
+    pub fn checksum(&self) -> u8 {
         self.check_sum
     }
 }
@@ -236,7 +236,7 @@ struct VolumeLabelEntry {
 
 impl VolumeLabelEntry {
     /*获取卷名*/
-    pub fn get_name(&self) -> String {
+    pub fn name(&self) -> String {
         let mut name: String = String::new();
         for i in 0..11 {
             // 记录文件名

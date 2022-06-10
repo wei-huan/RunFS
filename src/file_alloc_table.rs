@@ -1,12 +1,14 @@
 // FAT 表结构体
-use super::{get_info_cache, BlockDevice, FAT_TABLE_START_SEC, SEC_SZ, SectorCache};
+use super::{get_info_cache, BlockDevice, SEC_SZ, SectorCache};
 use std::sync::Arc;
 
 const END_CLU: u32 = 0x0FFFFFFF;
 const BAD_CLU: u32 = 0xFFFFFFF7;
 const UNUSED_CLU: u32 = 0;
+
 const FAT_ENTRY_BYTES: usize = 4;
 const FAT_ENTRY_WIDTH: usize = 32;
+
 const ENTRYS_PER_SEC: usize = SEC_SZ / FAT_ENTRY_BYTES;
 
 #[repr(C)]
@@ -41,7 +43,7 @@ impl FATEntry {
     // }
 }
 
-// pub struct FileAllocTable {}
+pub struct FileAllocTable {}
 
-// impl FileAllocTable {
-// }
+impl FileAllocTable {
+}

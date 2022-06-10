@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum Error {
+pub enum FSError {
     /// A read operation cannot be completed because an end of a file has been reached prematurely.
     UnexpectedEof,
     /// A write operation cannot be completed because `Write::write` returned 0.
@@ -20,4 +20,10 @@ pub enum Error {
     InvalidFileNameLength,
     /// The provided file name contains an invalid character.
     UnsupportedFileNameCharacter,
+}
+
+#[derive(Debug)]
+pub enum IOError {
+    /// buffer size is smaller than requested
+    NotEnoughBuffer
 }

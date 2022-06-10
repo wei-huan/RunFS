@@ -1,22 +1,28 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表
-use super::{BlockDevice, BLOCK_SZ, DATA_END_SEC, DATA_START_SEC, MAX_SEC_SZ, INFOSEC_CACHE_SZ};
+use super::{BlockDevice, RunFileSystem, INFOSEC_CACHE_SZ, MAX_SEC_SZ};
 use lazy_static::*;
 use spin::RwLock;
 use std::collections::VecDeque;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-// 在本系统设计中, BlockCache块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
+// 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {
     cache: Vec<u8>,
     sector_id: usize,
     modified: bool,
     block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
+    file_system: Arc<RunFileSystem>,
 }
 
 impl BlockCache {
-    pub fn new(sector_id: usize, sector_size: usize, block_dev: Arc<dyn BlockDevice>) -> Self {
-        // assert!((sector_id >= DATA_START_SEC) && (sector_id <= DATA_END_SEC));
+    pub fn new(
+        sector_id: usize,
+        block_dev: Arc<dyn BlockDevice>,
+        runfs: Arc<RunFileSystem>,
+    ) -> Self {
+        let data_start_sector: usize = runfs.bpb.first_data_sector().try_into().unwrap();
+        let sector_size: usize = runfs.bpb.bytes_per_sector().try_into().unwrap();
+        assert!(sector_id < data_start_sector, "sector id not in data range");
         let mut cache: Vec<u8> = vec![0; MAX_SEC_SZ];
         block_dev.read_block(sector_id, &mut cache);
         // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
@@ -30,12 +36,13 @@ impl BlockCache {
             sector_id,
             modified: false,
             block_dev: block_dev,
+            file_system: runfs,
         }
     }
-    pub fn get_cache_ref(&self) -> &[u8] {
+    pub fn cache_ref(&self) -> &[u8] {
         &self.cache
     }
-    pub fn get_cache_mut(&mut self) -> &mut [u8] {
+    pub fn cache_mut(&mut self) -> &mut [u8] {
         &mut self.cache
     }
     pub fn get_ref<T>(&self, offset: usize) -> &T
@@ -43,7 +50,8 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        assert!(offset + type_size <= BLOCK_SZ);
+        let block_size: usize = self.file_system.bpb.bytes_per_sector().try_into().unwrap();
+        assert!(offset + type_size <= block_size);
         unsafe {
             &*((&self.cache[offset..offset + type_size]).as_ptr() as *const _ as usize as *const T)
                 as &T
@@ -54,7 +62,8 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        assert!(offset + type_size <= BLOCK_SZ);
+        let block_size: usize = self.file_system.bpb.bytes_per_sector().try_into().unwrap();
+        assert!(offset + type_size <= block_size);
         self.set_modify();
         unsafe {
             &mut *((&mut (self.cache[offset..offset + type_size])).as_mut_ptr() as *mut _ as usize
@@ -92,12 +101,14 @@ impl Drop for BlockCache {
 pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
+    file_system: Arc<RunFileSystem>,
     queue: VecDeque<(usize, Arc<RwLock<SectorCache>>)>,
 }
 
 impl SectorCacheManager {
-    pub fn new() -> Self {
+    pub fn new(runfs: Arc<RunFileSystem>) -> Self {
         Self {
+            file_system: runfs,
             queue: VecDeque::new(),
         }
     }
@@ -126,8 +137,8 @@ impl SectorCacheManager {
             // load sector into mem and push back
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
                 sector_id,
-                512,
                 Arc::clone(&block_device),
+                Arc::clone(&self.file_system),
             )));
             self.queue.push_back((sector_id, Arc::clone(&sector_cache)));
             sector_cache
@@ -144,7 +155,6 @@ pub fn get_info_cache(
     sector_id: usize,
     block_device: Arc<dyn BlockDevice>,
 ) -> Arc<RwLock<SectorCache>> {
-    assert!(sector_id < DATA_START_SEC);
     INFOSEC_CACHE_MANAGER
         .write()
         .get_cache(sector_id, block_device)
