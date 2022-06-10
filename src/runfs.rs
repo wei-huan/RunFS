@@ -28,7 +28,7 @@ pub struct BiosParameterBlock {
     extended_flags: u16,
     fs_version: u16,
     root_dir_cluster: u32,
-    fsinfo_sector_number: u16,
+    fsinfo_sector: u16,
     backup_boot_sector: u16,
     dummy2: [u8; 15], // 不关心的数据
     volumn_id: u32,
@@ -123,10 +123,10 @@ impl BiosParameterBlock {
             );
             return Err(Error::CorruptedFileSystem);
         }
-        if self.fsinfo_sector_number >= self.reserved_sectors {
+        if self.fsinfo_sector >= self.reserved_sectors {
             println!(
                 "Invalid BPB: expected FSInfo sector to be in the reserved region (sector < {}) but got sector {}",
-                self.reserved_sectors, self.fsinfo_sector_number
+                self.reserved_sectors, self.fsinfo_sector
             );
             return Err(Error::CorruptedFileSystem);
         }
@@ -232,6 +232,15 @@ impl BiosParameterBlock {
         let first_data_sector = self.first_data_sector();
         let data_sectors = total_sectors - first_data_sector;
         data_sectors / u32::from(self.sectors_per_cluster)
+    }
+    pub fn cluster_size(&self) -> u32 {
+        u32::from(self.sectors_per_cluster) * u32::from(self.bytes_per_sector)
+    }
+    pub fn fsinfo_sector(&self) -> u32 {
+        u32::from(self.fsinfo_sector)
+    }
+    pub fn backup_boot_sector(&self) -> u32 {
+        u32::from(self.backup_boot_sector)
     }
 }
 
