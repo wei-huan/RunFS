@@ -1,5 +1,6 @@
-/// 块缓存层，用于 FAT32 的保留扇区和 FAT 表
-use super::{BiosParameterBlock, BlockDevice, MAX_SEC_SZ};
+/// 块缓存层，用于 FAT32 的保留扇区和 FAT 表区
+use super::{BiosParameterBlock, BlockDevice};
+use crate::config::{INFOSEC_CACHE_SZ, MAX_SEC_SZ};
 use spin::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -110,9 +111,6 @@ pub struct SectorCacheManager {
 }
 
 impl SectorCacheManager {
-    // 扇区缓冲区长度
-    const INFOSEC_CACHE_SZ: usize = 4;
-
     pub fn new(bpb: Arc<BiosParameterBlock>, block_device: Arc<dyn BlockDevice>) -> Self {
         Self {
             bpb,
@@ -125,7 +123,7 @@ impl SectorCacheManager {
             Arc::clone(&pair.1)
         } else {
             // substitute
-            if self.queue.len() == Self::INFOSEC_CACHE_SZ {
+            if self.queue.len() == INFOSEC_CACHE_SZ {
                 // from front to tail
                 if let Some((idx, _)) = self
                     .queue

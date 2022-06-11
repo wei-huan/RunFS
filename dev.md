@@ -18,3 +18,7 @@ Cluster和Sector结构体大小其实是不确定的,所以问题很大,目前�
 
 今天是 2022 年 6 月 10 日
 INFO_CACHE_MANAGER 和 DATA_CACHE_MANAGER 应该被做进 RunFileSystem 里面, 成员有 Arc BlockDevice 不好搞
+
+今天是 2022 年 6 月 11 日
+info_cache_manager 和 data_cache_manager 成功整合进 RunFileSystem 里了
+下一步是完成目录项和FAT表的读取

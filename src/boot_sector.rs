@@ -1,9 +1,9 @@
 // 对 BootSector, BPB抽象,文件系统重要信息管理.
-
 use super::BlockDevice;
+use crate::config::MAX_CLUS_SZ;
 use crate::directory_entry::DIRENT_SZ;
 use crate::error::FSError;
-use crate::{MAX_CLUS_SZ, START_CLUS_ID};
+use crate::START_CLUS_ID;
 use std::slice;
 use std::sync::Arc;
 

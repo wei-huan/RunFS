@@ -1,5 +1,6 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
-use super::{BiosParameterBlock, BlockDevice, MAX_CLUS_SZ, START_CLUS_ID};
+use super::{BiosParameterBlock, BlockDevice, START_CLUS_ID};
+use crate::config::{DATACLU_CACHE_SZ, MAX_CLUS_SZ};
 use spin::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -123,9 +124,6 @@ pub struct ClusterCacheManager {
 }
 
 impl ClusterCacheManager {
-    // 簇缓冲区长度
-    const CLU_CACHE_SZ: usize = 2;
-
     pub fn new(bpb: Arc<BiosParameterBlock>, block_device: Arc<dyn BlockDevice>) -> Self {
         Self {
             bpb,
@@ -138,7 +136,7 @@ impl ClusterCacheManager {
             Arc::clone(&pair.1)
         } else {
             // substitute
-            if self.queue.len() == Self::CLU_CACHE_SZ {
+            if self.queue.len() == DATACLU_CACHE_SZ {
                 // from front to tail
                 if let Some((idx, _)) = self
                     .queue

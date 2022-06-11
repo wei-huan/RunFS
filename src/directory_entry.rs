@@ -21,6 +21,7 @@ enum FileDirectoryEntry {
 }
 
 // 短目录项,也适用于当前目录项和上级目录项
+#[repr(C, packed(1))]
 pub(crate) struct ShortDirectoryEntry {
     name: [u8; 8], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
     extension: [u8; 3],
@@ -174,6 +175,7 @@ impl ShortDirectoryEntry {
 }
 
 // 长目录项, 一般来说现在的 OS 无论创建的文件或目录名字是否超出短目录项要求都会在短目录项前添加长目录项
+#[repr(C, packed(1))]
 struct LongDirectoryEntry {
     // use Unicode !!!
     // 如果是该文件的最后一个长文件名目录项，
