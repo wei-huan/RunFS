@@ -14,4 +14,7 @@ BitMap应该要 Mutex 全局性结构体，而且必须为 Arc，要在线程间
 
 Cluster和Sector结构体大小其实是不确定的,所以问题很大,目前的实现不能运行后读取DBR改变大小.
 
-目前实现是先扩后缩,稍微有一点点不爽
+目前实现是先扩后缩,稍微有一点点不爽.
+
+今天是 2022 年 6 月 10 日
+INFO_CACHE_MANAGER 和 DATA_CACHE_MANAGER 应该被做进 RunFileSystem 里面, 成员有 Arc BlockDevice 不好搞
