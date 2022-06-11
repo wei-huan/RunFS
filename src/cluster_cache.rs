@@ -1,36 +1,36 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
-use super::{BlockDevice, RunFileSystem, CLU_CACHE_SZ, MAX_CLUS_SZ, START_CLUS_ID};
+use super::{BiosParameterBlock, BlockDevice, CLU_CACHE_SZ, MAX_CLUS_SZ, START_CLUS_ID};
 use lazy_static::*;
 use spin::RwLock;
 use std::collections::VecDeque;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 pub struct ClusterCache {
     cache: Vec<u8>,
     cluster_id: usize, // cluster_id 是数据区的簇号, 一般从 2 开始标号
     modified: bool,
+    bpb: Arc<BiosParameterBlock>,
     block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
-    file_system: Weak<RunFileSystem>,
 }
 
 impl ClusterCache {
     pub fn new(
         cluster_id: usize,
         block_dev: Arc<dyn BlockDevice>,
-        runfs: Arc<RunFileSystem>,
+        bpb: Arc<BiosParameterBlock>,
     ) -> Self {
-        let total_clusters: usize = runfs.bpb.total_clusters().try_into().unwrap();
+        let total_clusters: usize = bpb.total_clusters().try_into().unwrap();
         let end_cluster_id: usize = total_clusters + START_CLUS_ID;
         assert!(
             cluster_id >= START_CLUS_ID && cluster_id <= end_cluster_id,
             "cluster id not in data range"
         );
-        let sectors_per_cluster: usize = runfs.bpb.sectors_per_cluster().try_into().unwrap();
-        let data_start_sector: usize = runfs.bpb.first_data_sector().try_into().unwrap();
-        let sector_size: usize = runfs.bpb.bytes_per_sector().try_into().unwrap();
+        let sectors_per_cluster: usize = bpb.sectors_per_cluster().try_into().unwrap();
+        let data_start_sector: usize = bpb.first_data_sector().try_into().unwrap();
+        let sector_size: usize = bpb.bytes_per_sector().try_into().unwrap();
         let mut cache: Vec<u8> = vec![0; MAX_CLUS_SZ];
         let block_id = (cluster_id - START_CLUS_ID) * sectors_per_cluster + data_start_sector;
-        let cluster_size: usize = runfs.bpb.cluster_size().try_into().unwrap();
+        let cluster_size: usize = bpb.cluster_size().try_into().unwrap();
         for (i, id) in (block_id..(block_id + sectors_per_cluster)).enumerate() {
             block_dev
                 .read_block(id, &mut cache[(i * sector_size)..((i + 1) * sector_size)])
@@ -47,8 +47,8 @@ impl ClusterCache {
             cache,
             cluster_id,
             modified: false,
-            block_dev: block_dev,
-            file_system: Arc::downgrade(&runfs),
+            bpb,
+            block_dev,
         }
     }
     pub fn get_cache_ref(&self) -> &[u8] {
@@ -62,14 +62,7 @@ impl ClusterCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let cluster_size: usize = self
-            .file_system
-            .upgrade()
-            .unwrap()
-            .bpb
-            .cluster_size()
-            .try_into()
-            .unwrap();
+        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
         assert!(offset + type_size <= cluster_size);
         unsafe {
             &*((&self.cache[offset..offset + type_size]).as_ptr() as *const _ as usize as *const T)
@@ -81,14 +74,7 @@ impl ClusterCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let cluster_size: usize = self
-            .file_system
-            .upgrade()
-            .unwrap()
-            .bpb
-            .cluster_size()
-            .try_into()
-            .unwrap();
+        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
         assert!(offset + type_size <= cluster_size);
         self.set_modify();
         unsafe {
@@ -110,10 +96,9 @@ impl ClusterCache {
     }
     pub fn sync(&mut self) {
         if self.modified {
-            let runfs = self.file_system.upgrade().unwrap();
-            let sector_size: usize = runfs.bpb.bytes_per_sector().try_into().unwrap();
-            let sectors_per_cluster: usize = runfs.bpb.sectors_per_cluster().try_into().unwrap();
-            let data_start_sector: usize = runfs.bpb.first_data_sector().try_into().unwrap();
+            let sector_size: usize = self.bpb.bytes_per_sector().try_into().unwrap();
+            let sectors_per_cluster: usize = self.bpb.sectors_per_cluster().try_into().unwrap();
+            let data_start_sector: usize = self.bpb.first_data_sector().try_into().unwrap();
             self.modified = false;
             let block_id =
                 (self.cluster_id - START_CLUS_ID) * sectors_per_cluster + data_start_sector;
@@ -133,19 +118,16 @@ impl Drop for ClusterCache {
 }
 
 pub struct ClusterCacheManager {
-    pub(crate) file_system: Option<Arc<RunFileSystem>>,
+    bpb: Arc<BiosParameterBlock>,
     queue: VecDeque<(usize, Arc<RwLock<ClusterCache>>)>,
 }
 
 impl ClusterCacheManager {
-    pub fn new() -> Self {
+    pub fn new(bpb: Arc<BiosParameterBlock>) -> Self {
         Self {
-            file_system: None,
+            bpb,
             queue: VecDeque::new(),
         }
-    }
-    pub fn set_fs(&mut self, runfs: Arc<RunFileSystem>) {
-        self.file_system = Some(runfs);
     }
     pub fn get_cache(
         &mut self,
@@ -173,7 +155,7 @@ impl ClusterCacheManager {
             let cluster_cache = Arc::new(RwLock::new(ClusterCache::new(
                 cluster_id,
                 Arc::clone(&block_device),
-                Arc::clone(&self.file_system.as_ref().unwrap()),
+                Arc::clone(&self.bpb),
             )));
             self.queue
                 .push_back((cluster_id, Arc::clone(&cluster_cache)));
@@ -187,24 +169,20 @@ impl ClusterCacheManager {
     }
 }
 
-lazy_static! {
-    pub static ref DATA_CLUS_CACHE_MANAGER: RwLock<ClusterCacheManager> =
-        RwLock::new(ClusterCacheManager::new());
-}
+// lazy_static! {
+//     pub static ref DATA_CLUS_CACHE_MANAGER: RwLock<ClusterCacheManager> =
+//         RwLock::new(ClusterCacheManager::new());
+// }
 
-pub fn get_data_cache(
-    cluster_id: usize,
-    block_device: Arc<dyn BlockDevice>,
-) -> Arc<RwLock<ClusterCache>> {
-    DATA_CLUS_CACHE_MANAGER
-        .write()
-        .get_cache(cluster_id, block_device)
-}
+// pub fn get_data_cache(
+//     cluster_id: usize,
+//     block_device: Arc<dyn BlockDevice>,
+// ) -> Arc<RwLock<ClusterCache>> {
+//     DATA_CLUS_CACHE_MANAGER
+//         .write()
+//         .get_cache(cluster_id, block_device)
+// }
 
-pub fn data_cache_sync_all() {
-    DATA_CLUS_CACHE_MANAGER.write().data_cache_sync_all();
-}
-
-pub fn data_cache_set_fs(runfs: Arc<RunFileSystem>) {
-    DATA_CLUS_CACHE_MANAGER.write().set_fs(runfs);
-}
+// pub fn data_cache_sync_all() {
+//     DATA_CLUS_CACHE_MANAGER.write().data_cache_sync_all();
+// }

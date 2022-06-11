@@ -1,27 +1,27 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表
-use super::{BlockDevice, RunFileSystem, INFOSEC_CACHE_SZ, MAX_SEC_SZ};
+use super::{BiosParameterBlock, BlockDevice, INFOSEC_CACHE_SZ, MAX_SEC_SZ};
 use lazy_static::*;
 use spin::RwLock;
 use std::collections::VecDeque;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 // 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {
     cache: Vec<u8>,
     sector_id: usize,
     modified: bool,
+    bpb: Arc<BiosParameterBlock>,
     block_dev: Arc<dyn BlockDevice>, // Arc + dyn 实现 BlockDevice Trait 的动态分发
-    file_system: Weak<RunFileSystem>,
 }
 
 impl BlockCache {
     pub fn new(
         sector_id: usize,
         block_dev: Arc<dyn BlockDevice>,
-        runfs: Arc<RunFileSystem>,
+        bpb: Arc<BiosParameterBlock>,
     ) -> Self {
-        let data_start_sector: usize = runfs.bpb.first_data_sector().try_into().unwrap();
-        let sector_size: usize = runfs.bpb.bytes_per_sector().try_into().unwrap();
+        let data_start_sector: usize = bpb.first_data_sector().try_into().unwrap();
+        let sector_size: usize = bpb.bytes_per_sector().try_into().unwrap();
         assert!(sector_id < data_start_sector, "sector id not in info range");
         let mut cache: Vec<u8> = vec![0; MAX_SEC_SZ];
         block_dev.read_block(sector_id, &mut cache).unwrap();
@@ -38,8 +38,8 @@ impl BlockCache {
             cache,
             sector_id,
             modified: false,
-            block_dev: block_dev,
-            file_system: Arc::downgrade(&runfs),
+            bpb,
+            block_dev,
         }
     }
     pub fn cache_ref(&self) -> &[u8] {
@@ -53,14 +53,7 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let block_size: usize = self
-            .file_system
-            .upgrade()
-            .unwrap()
-            .bpb
-            .bytes_per_sector()
-            .try_into()
-            .unwrap();
+        let block_size: usize = self.bpb.bytes_per_sector().try_into().unwrap();
         assert!(offset + type_size <= block_size);
         unsafe {
             &*((&self.cache[offset..offset + type_size]).as_ptr() as *const _ as usize as *const T)
@@ -72,14 +65,7 @@ impl BlockCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let block_size: usize = self
-            .file_system
-            .upgrade()
-            .unwrap()
-            .bpb
-            .bytes_per_sector()
-            .try_into()
-            .unwrap();
+        let block_size: usize = self.bpb.bytes_per_sector().try_into().unwrap();
         assert!(offset + type_size <= block_size);
         self.set_modify();
         unsafe {
@@ -119,19 +105,16 @@ impl Drop for BlockCache {
 pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
-    pub(crate) file_system: Option<Arc<RunFileSystem>>,
+    bpb: Arc<BiosParameterBlock>,
     queue: VecDeque<(usize, Arc<RwLock<SectorCache>>)>,
 }
 
 impl SectorCacheManager {
-    pub fn new() -> Self {
+    pub fn new(bpb: Arc<BiosParameterBlock>) -> Self {
         Self {
-            file_system: None,
+            bpb,
             queue: VecDeque::new(),
         }
-    }
-    pub fn set_fs(&mut self, runfs: Arc<RunFileSystem>) {
-        self.file_system = Some(runfs);
     }
     pub fn get_cache(
         &mut self,
@@ -159,7 +142,7 @@ impl SectorCacheManager {
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
                 sector_id,
                 Arc::clone(&block_device),
-                Arc::clone(self.file_system.as_ref().unwrap()),
+                Arc::clone(&self.bpb),
             )));
             self.queue.push_back((sector_id, Arc::clone(&sector_cache)));
             sector_cache
@@ -172,24 +155,20 @@ impl SectorCacheManager {
     }
 }
 
-lazy_static! {
-    pub static ref INFO_SEC_CACHE_MANAGER: RwLock<SectorCacheManager> =
-        RwLock::new(SectorCacheManager::new());
-}
+// lazy_static! {
+//     pub static ref INFO_SEC_CACHE_MANAGER: RwLock<SectorCacheManager> =
+//         RwLock::new(SectorCacheManager::new());
+// }
 
-pub fn get_info_cache(
-    sector_id: usize,
-    block_device: Arc<dyn BlockDevice>,
-) -> Arc<RwLock<SectorCache>> {
-    INFO_SEC_CACHE_MANAGER
-        .write()
-        .get_cache(sector_id, block_device)
-}
+// pub fn get_info_cache(
+//     sector_id: usize,
+//     block_device: Arc<dyn BlockDevice>,
+// ) -> Arc<RwLock<SectorCache>> {
+//     INFO_SEC_CACHE_MANAGER
+//         .write()
+//         .get_cache(sector_id, block_device)
+// }
 
-pub fn info_cache_sync_all() {
-    INFO_SEC_CACHE_MANAGER.write().info_cache_sync_all();
-}
-
-pub fn info_cache_set_fs(runfs: Arc<RunFileSystem>) {
-    INFO_SEC_CACHE_MANAGER.write().set_fs(runfs);
-}
+// pub fn info_cache_sync_all() {
+//     INFO_SEC_CACHE_MANAGER.write().info_cache_sync_all();
+// }

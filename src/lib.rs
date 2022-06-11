@@ -9,13 +9,14 @@ mod runfs;
 mod sector_cache;
 
 use fsinfo::{FSInfo, FSInfoSector};
+use cluster_cache::ClusterCacheManager;
+use sector_cache::SectorCacheManager;
 
 pub use block_device::BlockDevice;
 pub use boot_sector::{BiosParameterBlock, BootSector};
-pub use cluster_cache::{data_cache_set_fs, data_cache_sync_all, get_data_cache};
 pub use error::{FSError, IOError};
 pub use runfs::RunFileSystem;
-pub use sector_cache::{get_info_cache, info_cache_set_fs, info_cache_sync_all};
+// pub use sector_cache::{get_info_cache, info_cache_set_fs, info_cache_sync_all};
 
 pub const MAX_SEC_SZ: usize = 4096; // 限制最大扇区4096Byte, 太大了不伺候了, 单片机受不了
 pub const MAX_CLUS_SZ: usize = 512 * 64; // 限制最大簇32KB, 太大了不伺候了, 单片机受不了

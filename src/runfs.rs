@@ -1,12 +1,17 @@
 //对文件系统的全局管理.
-use super::{BiosParameterBlock, BlockDevice, BootSector, FSInfo, FSInfoSector};
+use super::{
+    BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FSInfo, FSInfoSector,
+    SectorCacheManager,
+};
 use std::sync::Arc;
 
 // 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
     pub(crate) bpb: BiosParameterBlock,
     pub(crate) fsinfo: FSInfo,
-    // block_device: Arc<dyn BlockDevice>,
+    pub(crate) cluster_cache: ClusterCacheManager,
+    pub(crate) sector_cache: SectorCacheManager,
+    block_device: Arc<dyn BlockDevice>,
     // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
@@ -37,7 +42,9 @@ impl RunFileSystem {
         Self {
             bpb,
             fsinfo,
-            // block_device,
+            cluster_cache: ClusterCacheManager::new(Arc::new(bpb)),
+            sector_cache: SectorCacheManager::new(Arc::new(bpb)),
+            block_device,
         }
     }
     pub fn bpb(&self) -> BiosParameterBlock {
