@@ -1,6 +1,5 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表
-use super::{BiosParameterBlock, BlockDevice, INFOSEC_CACHE_SZ, MAX_SEC_SZ};
-use lazy_static::*;
+use super::{BiosParameterBlock, BlockDevice, MAX_SEC_SZ};
 use spin::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -106,26 +105,27 @@ pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
     bpb: Arc<BiosParameterBlock>,
+    block_device: Arc<dyn BlockDevice>,
     queue: VecDeque<(usize, Arc<RwLock<SectorCache>>)>,
 }
 
 impl SectorCacheManager {
-    pub fn new(bpb: Arc<BiosParameterBlock>) -> Self {
+    // 扇区缓冲区长度
+    const INFOSEC_CACHE_SZ: usize = 4;
+
+    pub fn new(bpb: Arc<BiosParameterBlock>, block_device: Arc<dyn BlockDevice>) -> Self {
         Self {
             bpb,
+            block_device,
             queue: VecDeque::new(),
         }
     }
-    pub fn get_cache(
-        &mut self,
-        sector_id: usize,
-        block_device: Arc<dyn BlockDevice>,
-    ) -> Arc<RwLock<SectorCache>> {
+    pub fn get_cache(&mut self, sector_id: usize) -> Arc<RwLock<SectorCache>> {
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == sector_id) {
             Arc::clone(&pair.1)
         } else {
             // substitute
-            if self.queue.len() == INFOSEC_CACHE_SZ {
+            if self.queue.len() == Self::INFOSEC_CACHE_SZ {
                 // from front to tail
                 if let Some((idx, _)) = self
                     .queue
@@ -141,7 +141,7 @@ impl SectorCacheManager {
             // load sector into mem and push back
             let sector_cache = Arc::new(RwLock::new(BlockCache::new(
                 sector_id,
-                Arc::clone(&block_device),
+                Arc::clone(&self.block_device),
                 Arc::clone(&self.bpb),
             )));
             self.queue.push_back((sector_id, Arc::clone(&sector_cache)));
@@ -154,21 +154,3 @@ impl SectorCacheManager {
         }
     }
 }
-
-// lazy_static! {
-//     pub static ref INFO_SEC_CACHE_MANAGER: RwLock<SectorCacheManager> =
-//         RwLock::new(SectorCacheManager::new());
-// }
-
-// pub fn get_info_cache(
-//     sector_id: usize,
-//     block_device: Arc<dyn BlockDevice>,
-// ) -> Arc<RwLock<SectorCache>> {
-//     INFO_SEC_CACHE_MANAGER
-//         .write()
-//         .get_cache(sector_id, block_device)
-// }
-
-// pub fn info_cache_sync_all() {
-//     INFO_SEC_CACHE_MANAGER.write().info_cache_sync_all();
-// }

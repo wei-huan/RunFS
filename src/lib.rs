@@ -21,8 +21,3 @@ pub use runfs::RunFileSystem;
 pub const MAX_SEC_SZ: usize = 4096; // 限制最大扇区4096Byte, 太大了不伺候了, 单片机受不了
 pub const MAX_CLUS_SZ: usize = 512 * 64; // 限制最大簇32KB, 太大了不伺候了, 单片机受不了
 pub const START_CLUS_ID: usize = 2;
-
-// 扇区缓冲区长度
-const INFOSEC_CACHE_SZ: usize = 4;
-// 簇缓冲区长度
-const CLU_CACHE_SZ: usize = 2;

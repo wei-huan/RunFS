@@ -62,17 +62,11 @@ impl BiosParameterBlock {
     // 本项目实现的 FAT32 文件系统扇区的字节数只支持范围在 512-4096 字节中二的整指数倍
     fn validate_bytes_per_sector(&self) -> Result<(), FSError> {
         if self.bytes_per_sector.count_ones() != 1 {
-            println!(
-                "invalid bytes_per_sector value in BPB: expected a power of two but got {}",
-                self.bytes_per_sector
-            );
+            println!("invalid bytes_per_sector value in BPB: expected a power of two");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.bytes_per_sector < 512 || self.bytes_per_sector > 4096 {
-            println!(
-                "invalid bytes_per_sector value in BPB: expected value in range [512, 4096] but got {}",
-                self.bytes_per_sector
-            );
+            println!("invalid bytes_per_sector value in BPB: expected value in range [512, 4096]");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -110,24 +104,15 @@ impl BiosParameterBlock {
     }
     fn validate_reserved_sectors(&self) -> Result<(), FSError> {
         if self.reserved_sectors < 1 {
-            println!(
-                "invalid reserved_sectors value in BPB: {}",
-                self.reserved_sectors
-            );
+            println!("invalid reserved_sectors value in BPB");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.backup_boot_sector >= self.reserved_sectors {
-            println!(
-                "Invalid BPB: expected backup boot-sector to be in the reserved region (sector < {}) but got sector {}",
-                self.reserved_sectors, self.backup_boot_sector
-            );
+            println!("Invalid BPB: expected backup boot-sector to be in the reserved region");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.fsinfo_sector >= self.reserved_sectors {
-            println!(
-                "Invalid BPB: expected FSInfo sector to be in the reserved region (sector < {}) but got sector {}",
-                self.reserved_sectors, self.fsinfo_sector
-            );
+            println!("Invalid BPB: expected FSInfo sector to be in the reserved region");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -156,20 +141,14 @@ impl BiosParameterBlock {
             return Err(FSError::CorruptedFileSystem);
         }
         if total_sectors <= first_data_sector {
-            println!(
-                "Invalid total_sectors value in BPB: expected value > {} but got {}",
-                first_data_sector, total_sectors
-            );
+            println!("Invalid total_sectors value in BPB");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
     }
     fn validate_fats_sectors(&self) -> Result<(), FSError> {
         if self.fats_sectors == 0 {
-            println!(
-                "Invalid sectors_per_fat_32 value in FAT32 BPB: expected non-zero value but got {}",
-                self.fats_sectors
-            );
+            println!("Invalid sectors_per_fat_32 value in FAT32 BPB: expected non-zero value");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -292,25 +271,19 @@ impl BootSector {
         self.boot_sig = data.try_into().expect("slice with incorrect length");
     }
     // 直接通过块设备读取获得启动扇区, 只用于 RunFileSystem 创建
-    pub(crate) fn directly_new(block_device: Arc<dyn BlockDevice>) -> Self {
+    pub fn directly_new(block_device: Arc<dyn BlockDevice>) -> Self {
         // println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
         let boot_sector = BootSector::default();
         // 调试没问题,能够获取 512 Byte 准确数据
-        let mut sector_slice = unsafe {
+        let sector_slice = unsafe {
             slice::from_raw_parts_mut(
                 (&boot_sector as *const BootSector) as *mut u8,
                 core::mem::size_of::<BootSector>(),
             )
         };
-        block_device.read_block(0, sector_slice);
+        block_device.read_block(0, sector_slice).unwrap();
         boot_sector
     }
-    // pub(crate) fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-    //     let boot_sector: BootSector = get_info_cache(0, Arc::clone(&block_device))
-    //         .read()
-    //         .read(0, |bs: &BootSector| *bs);
-    //     boot_sector
-    // }
     pub(crate) fn validate(&self) -> Result<(), FSError> {
         if self.boot_sig != [0x55, 0xAA] {
             println!(

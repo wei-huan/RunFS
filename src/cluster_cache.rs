@@ -1,6 +1,5 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
-use super::{BiosParameterBlock, BlockDevice, CLU_CACHE_SZ, MAX_CLUS_SZ, START_CLUS_ID};
-use lazy_static::*;
+use super::{BiosParameterBlock, BlockDevice, MAX_CLUS_SZ, START_CLUS_ID};
 use spin::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -51,10 +50,10 @@ impl ClusterCache {
             block_dev,
         }
     }
-    pub fn get_cache_ref(&self) -> &[u8] {
+    pub fn cache_ref(&self) -> &[u8] {
         &self.cache
     }
-    pub fn get_cache_mut(&mut self) -> &mut [u8] {
+    pub fn cache_mut(&mut self) -> &mut [u8] {
         &mut self.cache
     }
     pub fn get_ref<T>(&self, offset: usize) -> &T
@@ -91,10 +90,10 @@ impl ClusterCache {
     pub fn is_modify(&self) -> bool {
         self.modified
     }
-    pub fn set_modify(&mut self) {
+    fn set_modify(&mut self) {
         self.modified = true
     }
-    pub fn sync(&mut self) {
+    fn sync(&mut self) {
         if self.modified {
             let sector_size: usize = self.bpb.bytes_per_sector().try_into().unwrap();
             let sectors_per_cluster: usize = self.bpb.sectors_per_cluster().try_into().unwrap();
@@ -119,26 +118,27 @@ impl Drop for ClusterCache {
 
 pub struct ClusterCacheManager {
     bpb: Arc<BiosParameterBlock>,
+    block_device: Arc<dyn BlockDevice>,
     queue: VecDeque<(usize, Arc<RwLock<ClusterCache>>)>,
 }
 
 impl ClusterCacheManager {
-    pub fn new(bpb: Arc<BiosParameterBlock>) -> Self {
+    // 簇缓冲区长度
+    const CLU_CACHE_SZ: usize = 2;
+
+    pub fn new(bpb: Arc<BiosParameterBlock>, block_device: Arc<dyn BlockDevice>) -> Self {
         Self {
             bpb,
+            block_device,
             queue: VecDeque::new(),
         }
     }
-    pub fn get_cache(
-        &mut self,
-        cluster_id: usize,
-        block_device: Arc<dyn BlockDevice>,
-    ) -> Arc<RwLock<ClusterCache>> {
+    pub fn get_cache(&mut self, cluster_id: usize) -> Arc<RwLock<ClusterCache>> {
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == cluster_id) {
             Arc::clone(&pair.1)
         } else {
             // substitute
-            if self.queue.len() == CLU_CACHE_SZ {
+            if self.queue.len() == Self::CLU_CACHE_SZ {
                 // from front to tail
                 if let Some((idx, _)) = self
                     .queue
@@ -154,7 +154,7 @@ impl ClusterCacheManager {
             // load cluster into mem and push back
             let cluster_cache = Arc::new(RwLock::new(ClusterCache::new(
                 cluster_id,
-                Arc::clone(&block_device),
+                Arc::clone(&self.block_device),
                 Arc::clone(&self.bpb),
             )));
             self.queue
@@ -168,21 +168,3 @@ impl ClusterCacheManager {
         }
     }
 }
-
-// lazy_static! {
-//     pub static ref DATA_CLUS_CACHE_MANAGER: RwLock<ClusterCacheManager> =
-//         RwLock::new(ClusterCacheManager::new());
-// }
-
-// pub fn get_data_cache(
-//     cluster_id: usize,
-//     block_device: Arc<dyn BlockDevice>,
-// ) -> Arc<RwLock<ClusterCache>> {
-//     DATA_CLUS_CACHE_MANAGER
-//         .write()
-//         .get_cache(cluster_id, block_device)
-// }
-
-// pub fn data_cache_sync_all() {
-//     DATA_CLUS_CACHE_MANAGER.write().data_cache_sync_all();
-// }

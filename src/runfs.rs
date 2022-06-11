@@ -9,9 +9,8 @@ use std::sync::Arc;
 pub struct RunFileSystem {
     pub(crate) bpb: BiosParameterBlock,
     pub(crate) fsinfo: FSInfo,
-    pub(crate) cluster_cache: ClusterCacheManager,
-    pub(crate) sector_cache: SectorCacheManager,
-    block_device: Arc<dyn BlockDevice>,
+    pub cluster_cache: ClusterCacheManager,
+    pub sector_cache: SectorCacheManager,
     // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
@@ -42,9 +41,8 @@ impl RunFileSystem {
         Self {
             bpb,
             fsinfo,
-            cluster_cache: ClusterCacheManager::new(Arc::new(bpb)),
-            sector_cache: SectorCacheManager::new(Arc::new(bpb)),
-            block_device,
+            cluster_cache: ClusterCacheManager::new(Arc::new(bpb), Arc::clone(&block_device)),
+            sector_cache: SectorCacheManager::new(Arc::new(bpb), Arc::clone(&block_device)),
         }
     }
     pub fn bpb(&self) -> BiosParameterBlock {
