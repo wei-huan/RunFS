@@ -18,6 +18,7 @@ use sector_cache::SectorCacheManager;
 pub use block_device::BlockDevice;
 pub use boot_sector::{BiosParameterBlock, BootSector};
 pub use error::{FSError, IOError};
+pub use fat::FATEntry;
 pub use runfs::RunFileSystem;
 
 pub const START_CLUS_ID: usize = 2;
