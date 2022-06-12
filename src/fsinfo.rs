@@ -13,6 +13,9 @@ pub struct FSInfo {
 }
 
 impl FSInfo {
+    #[allow(unused)]
+    const NO_INFORMATION: u32 = 0xFFFFFFFF;
+
     #[must_use]
     pub fn free_cluster(&self) -> u32 {
         self.next_free_cluster

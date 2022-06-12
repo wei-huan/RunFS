@@ -200,6 +200,12 @@ impl BiosParameterBlock {
     pub fn reserved_sectors(&self) -> u32 {
         u32::from(self.reserved_sectors)
     }
+    pub fn first_fats_sector(&self) -> u32 {
+        u32::from(self.reserved_sectors)
+    }
+    pub fn backup_first_fats_sector(&self) -> u32 {
+        u32::from(self.reserved_sectors) + self.fats_sectors
+    }
     // FAT32 读出来的没有用
     pub fn root_dir_sectors(&self) -> u32 {
         let root_dir_bytes = u32::from(self.root_entries) * DIRENT_SZ;

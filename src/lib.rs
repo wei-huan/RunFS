@@ -4,10 +4,11 @@ mod cluster_cache;
 mod config;
 mod directory_entry;
 mod error;
-mod file_alloc_table;
+mod fat;
 mod fsinfo;
 mod runfs;
 mod sector_cache;
+mod vfs;
 
 use cluster_cache::ClusterCacheManager;
 use fsinfo::{FSInfo, FSInfoSector};
