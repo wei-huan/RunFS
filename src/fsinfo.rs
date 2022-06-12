@@ -6,7 +6,7 @@ use std::slice;
 use std::sync::Arc;
 
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct FSInfo {
     free_cluster_count: u32,
     next_free_cluster: u32,
@@ -74,7 +74,9 @@ impl FSInfoSector {
                 core::mem::size_of::<FSInfoSector>(),
             )
         };
-        block_device.read_block(fsinfo_block_id, sector_slice).unwrap();
+        block_device
+            .read_block(fsinfo_block_id, sector_slice)
+            .unwrap();
         fsinfo_sector
     }
 

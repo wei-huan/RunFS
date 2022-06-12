@@ -11,6 +11,7 @@ mod sector_cache;
 mod vfs;
 
 use cluster_cache::ClusterCacheManager;
+use fat::FATManager;
 use fsinfo::{FSInfo, FSInfoSector};
 use sector_cache::SectorCacheManager;
 

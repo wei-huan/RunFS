@@ -1,16 +1,16 @@
 //对文件系统的全局管理.
 use super::{
-    BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FSInfo, FSInfoSector,
-    SectorCacheManager,
+    BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FATManager, FSInfoSector,
 };
+use spin::RwLock;
 use std::sync::Arc;
 
 // 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
-    pub(crate) bpb: BiosParameterBlock,
-    pub(crate) fsinfo: FSInfo,
+    pub bpb: Arc<BiosParameterBlock>,
+    pub fat_manager: Arc<RwLock<FATManager>>,
+    pub block_device: Arc<dyn BlockDevice>,
     pub cluster_cache: ClusterCacheManager,
-    pub sector_cache: SectorCacheManager,
     // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
@@ -39,16 +39,14 @@ impl RunFileSystem {
         }
         let fsinfo = fsinfo_sector.fsinfo;
         Self {
-            bpb,
-            fsinfo,
+            bpb: Arc::new(bpb),
             cluster_cache: ClusterCacheManager::new(Arc::new(bpb), Arc::clone(&block_device)),
-            sector_cache: SectorCacheManager::new(Arc::new(bpb), Arc::clone(&block_device)),
+            fat_manager: Arc::new(RwLock::new(FATManager::new(
+                Arc::new(fsinfo),
+                Arc::new(bpb),
+                Arc::clone(&block_device),
+            ))),
+            block_device,
         }
-    }
-    pub fn bpb(&self) -> BiosParameterBlock {
-        self.bpb
-    }
-    pub fn fsinfo(&self) -> FSInfo {
-        self.fsinfo
     }
 }

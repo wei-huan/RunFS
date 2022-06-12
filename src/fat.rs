@@ -1,5 +1,5 @@
 // FAT 表结构体
-use super::BlockDevice;
+use super::{BiosParameterBlock, BlockDevice, FSInfo, SectorCacheManager};
 use std::sync::Arc;
 
 const BYTES_PER_ENTRY: usize = 4;
@@ -40,6 +40,22 @@ pub enum FATEntry {
 //     }
 // }
 
-pub struct FileAllocationTable {}
 
-impl FileAllocationTable {}
+/// 管理 FAT 和 FSINFO
+pub struct FATManager {
+    pub fsinfo: Arc<FSInfo>,
+    pub sector_cache: SectorCacheManager,
+}
+
+impl FATManager {
+    pub fn new(
+        fsinfo: Arc<FSInfo>,
+        bpb: Arc<BiosParameterBlock>,
+        block_device: Arc<dyn BlockDevice>,
+    ) -> Self {
+        Self {
+            fsinfo,
+            sector_cache: SectorCacheManager::new(bpb, block_device),
+        }
+    }
+}
