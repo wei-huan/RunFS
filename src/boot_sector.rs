@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 // BPB 79 Byte
 #[repr(C, packed(1))]
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct BiosParameterBlock {
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
@@ -39,13 +39,6 @@ pub struct BiosParameterBlock {
 impl BiosParameterBlock {
     const FAT32_MAX_CLUSTERS: u32 = 0x0FFF_FFF4;
 
-    #[allow(unused)]
-    // fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-    //     let bpb: BiosParameterBlock = get_info_cache(0, Arc::clone(&block_device))
-    //         .read()
-    //         .read(11, |bpb: &BiosParameterBlock| *bpb);
-    //     bpb
-    // }
     // RunFS 最先判断是否是 FAT32 类型文件系统
     fn validate_fat32(&self) -> Result<(), FSError> {
         if self.root_entries != 0
@@ -185,6 +178,9 @@ impl BiosParameterBlock {
         self.validate_total_clusters()?;
         Ok(())
     }
+    pub fn volumn_id(&self) -> u32 {
+        self.volumn_id
+    }
     pub fn bytes_per_sector(&self) -> u16 {
         self.bytes_per_sector
     }
@@ -201,10 +197,10 @@ impl BiosParameterBlock {
         u32::from(self.reserved_sectors)
     }
     pub fn first_fats_sector(&self) -> u32 {
-        u32::from(self.reserved_sectors)
+        self.reserved_sectors()
     }
-    pub fn backup_first_fats_sector(&self) -> u32 {
-        u32::from(self.reserved_sectors) + self.fats_sectors
+    pub fn first_backup_fats_sector(&self) -> u32 {
+        self.first_fats_sector() + self.fats_sectors
     }
     // FAT32 读出来的没有用
     pub fn root_dir_sectors(&self) -> u32 {

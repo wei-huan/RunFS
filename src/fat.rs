@@ -17,45 +17,45 @@ pub enum FATEntry {
     Next(u32),
 }
 
-// pub struct FileAllocationTable {
-//     fat1_sector: usize,
-//     fat2_sector: usize,
-//     entrys_per_sec: usize,
-// }
-
-// impl FileAllocationTable {
-//     pub fn new(fat1_sector: usize, fat2_sector: usize, entrys_per_sec: usize) -> Self {
-//         Self {
-//             fat1_sector,
-//             fat2_sector,
-//             entrys_per_sec,
-//         }
-//     }
-//     /// 前为 FAT1 的扇区号，后为 FAT2 的扇区号，最后为offset
-//     fn position(&self, cluster_id: usize) -> (usize, usize, usize) {
-//         let fat1_sec = self.fat1_sector + cluster_id / self.entrys_per_sec;
-//         let fat2_sec = self.fat2_sector + cluster_id / self.entrys_per_sec;
-//         let offset = BYTES_PER_ENTRY * (cluster_id % self.entrys_per_sec);
-//         (fat1_sec, fat2_sec, offset)
-//     }
-// }
-
-
 /// 管理 FAT 和 FSINFO
 pub struct FATManager {
-    pub fsinfo: Arc<FSInfo>,
+    fsinfo: FSInfo,
+    pub bpb: Arc<BiosParameterBlock>,
     pub sector_cache: SectorCacheManager,
 }
 
 impl FATManager {
     pub fn new(
-        fsinfo: Arc<FSInfo>,
+        fsinfo: FSInfo,
         bpb: Arc<BiosParameterBlock>,
         block_device: Arc<dyn BlockDevice>,
     ) -> Self {
         Self {
+            bpb: Arc::clone(&bpb),
             fsinfo,
             sector_cache: SectorCacheManager::new(bpb, block_device),
         }
+    }
+    pub fn fsinfo(&self) -> FSInfo {
+        self.fsinfo
+    }
+    pub fn entrys_per_sector(&self) -> usize {
+        self.bpb.bytes_per_sector() as usize / BYTES_PER_ENTRY
+    }
+    pub fn position(&self, cluster_id: usize) -> (usize, usize, usize) {
+        let fat_sector: usize =
+            self.bpb.first_fats_sector() as usize + (cluster_id / self.entrys_per_sector());
+        let backup_fat_sector: usize =
+            self.bpb.first_backup_fats_sector() as usize + (cluster_id / self.entrys_per_sector());
+        let offset = BYTES_PER_ENTRY * (cluster_id % self.entrys_per_sector());
+        (fat_sector, backup_fat_sector, offset)
+    }
+    pub fn fat_entry(&mut self, cluster_id: usize) -> FATEntry {
+        let (sector_id, _, offset) = self.position(cluster_id);
+        println!("sector_id: {}, offset: {}", sector_id, offset);
+        let sector = self.sector_cache.get_cache(sector_id);
+        println!("size of FATEntry {}", core::size_of<FATEntry>());
+        let entry = sector.read().read(offset, |e: &FATEntry| *e);
+        entry
     }
 }

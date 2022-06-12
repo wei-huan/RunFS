@@ -106,8 +106,8 @@ pub type SectorCache = BlockCache;
 
 pub struct SectorCacheManager {
     bpb: Arc<BiosParameterBlock>,
-    block_device: Arc<dyn BlockDevice>,
     queue: VecDeque<(usize, Arc<RwLock<SectorCache>>)>,
+    block_device: Arc<dyn BlockDevice>,
 }
 
 impl SectorCacheManager {
