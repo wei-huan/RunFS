@@ -1,7 +1,7 @@
 //对文件系统的全局管理.
 use super::{
     BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FATManager, FSInfo,
-    FSInfoSector,
+    FSInfoSector, FileAttributes, ShortDirectoryEntry,
 };
 use spin::RwLock;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ pub struct RunFileSystem {
     pub fat_manager: Arc<RwLock<FATManager>>,
     pub block_device: Arc<dyn BlockDevice>,
     pub cluster_cache: ClusterCacheManager,
-    // root_dir: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
+    root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
 impl RunFileSystem {
@@ -32,6 +32,12 @@ impl RunFileSystem {
             Err(e) => panic!("FSInfo Block not valid: {:?}", e),
         }
         let fsinfo = fsinfo_sector.fsinfo;
+        let mut root_dirent = ShortDirectoryEntry::new(
+            [0x2F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20], // .
+            [0x20, 0x20, 0x20],
+            FileAttributes::DIRECTORY,
+        );
+        root_dirent.set_first_cluster(Some(2));
         Self {
             bpb,
             cluster_cache: ClusterCacheManager::new(Arc::new(bpb), Arc::clone(&block_device)),
@@ -41,6 +47,7 @@ impl RunFileSystem {
                 Arc::clone(&block_device),
             ))),
             block_device,
+            root_dirent: Arc::new(RwLock::new(root_dirent)),
         }
     }
     /// Returns a volume identifier read from BPB in the Boot Sector.

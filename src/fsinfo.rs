@@ -80,13 +80,6 @@ impl FSInfoSector {
         fsinfo_sector
     }
 
-    // pub(crate) fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-    //     let fsinfo_sector: FSInfoSector = get_info_cache(1, Arc::clone(&block_device))
-    //         .read()
-    //         .read(0, |fs: &FSInfoSector| *fs);
-    //     fsinfo_sector
-    // }
-
     #[must_use]
     pub(crate) fn validate(&self) -> Result<(), FSError> {
         if self.lead_signature != Self::LEAD_SIGNATURE

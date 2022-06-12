@@ -2,7 +2,7 @@ mod block_device;
 mod boot_sector;
 mod cluster_cache;
 mod config;
-mod directory_entry;
+mod dir_entry;
 mod error;
 mod fat;
 mod fsinfo;
@@ -11,6 +11,7 @@ mod sector_cache;
 mod vfs;
 
 use cluster_cache::ClusterCacheManager;
+use dir_entry::{ShortDirectoryEntry, FileAttributes};
 use fat::FATManager;
 use fsinfo::{FSInfo, FSInfoSector};
 use sector_cache::SectorCacheManager;
@@ -20,5 +21,6 @@ pub use boot_sector::{BiosParameterBlock, BootSector};
 pub use error::{FSError, IOError};
 pub use fat::FATEntry;
 pub use runfs::RunFileSystem;
+pub use vfs::VFile;
 
 pub const START_CLUS_ID: usize = 2;

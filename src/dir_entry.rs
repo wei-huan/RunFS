@@ -1,11 +1,13 @@
 use bitflags::bitflags;
 
+const START_YEAR: u32 = 1980;
+
 pub(crate) const DIRENT_SZ: u32 = 32; // 目录项字节数
 
 pub(crate) const DIR_ENTRY_DELETED_FLAG: u8 = 0xE5;
 
-pub(crate) const SHORT_FILE_NAME_SIZE: usize = 8;
-pub(crate) const SHORT_FILE_EXT_SIZE: usize = 3;
+pub(crate) const SHORT_FILE_NAME_LEN: usize = 8;
+pub(crate) const SHORT_FILE_EXT_LEN: usize = 3;
 
 bitflags! {
     /// A FAT file attributes.
@@ -32,8 +34,8 @@ pub const LAST_LONG_ENTRY: u8 = 0x40;
 #[repr(C, packed(1))]
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ShortDirectoryEntry {
-    name: [u8; SHORT_FILE_NAME_SIZE], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
-    extension: [u8; SHORT_FILE_EXT_SIZE],
+    name: [u8; SHORT_FILE_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
+    extension: [u8; SHORT_FILE_EXT_LEN],
     attribute: FileAttributes, //可以用于判断是目录还是文件或者卷标
     os_reserved: u8,
     creation_tenths: u8,
@@ -48,9 +50,9 @@ pub(crate) struct ShortDirectoryEntry {
 }
 
 impl ShortDirectoryEntry {
-    pub(crate) fn new(
-        name: [u8; SHORT_FILE_NAME_SIZE],
-        extension: [u8; SHORT_FILE_EXT_SIZE],
+    pub fn new(
+        name: [u8; SHORT_FILE_NAME_LEN],
+        extension: [u8; SHORT_FILE_EXT_LEN],
         attribute: FileAttributes,
     ) -> Self {
         Self {
@@ -96,27 +98,29 @@ impl ShortDirectoryEntry {
 
     pub fn modification_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec
-        let year: u32 = ((self.modification_date & 0xFE00) >> 9) as u32 + 1980;
+        let year: u32 = ((self.modification_date & 0xFE00) >> 9) as u32 + START_YEAR;
         let month: u32 = ((self.modification_date & 0x01E0) >> 5) as u32;
         let day: u32 = (self.modification_date & 0x001F) as u32;
         let hour: u32 = ((self.modification_time & 0xF800) >> 11) as u32;
         let min: u32 = ((self.modification_time & 0x07E0) >> 5) as u32;
         let sec: u32 = ((self.modification_time & 0x001F) << 1) as u32; // 秒数需要*2
-        let long_sec: u64 =
-            ((((year - 1980) * 365 + month * 30 + day) * 24 + hour) * 3600 + min * 60 + sec) as u64;
+        let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
+            + min * 60
+            + sec) as u64;
         (year, month, day, hour, min, sec, long_sec)
     }
 
     pub fn accessed_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec
-        let year: u32 = ((self.last_acc_date & 0xFE00) >> 9) as u32 + 1980;
+        let year: u32 = ((self.last_acc_date & 0xFE00) >> 9) as u32 + START_YEAR;
         let month: u32 = ((self.last_acc_date & 0x01E0) >> 5) as u32;
         let day: u32 = (self.last_acc_date & 0x001F) as u32;
         let hour: u32 = 0;
         let min: u32 = 0;
         let sec: u32 = 0; // 没有相关信息，默认0
-        let long_sec: u64 =
-            ((((year - 1980) * 365 + month * 30 + day) * 24 + hour) * 3600 + min * 60 + sec) as u64;
+        let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
+            + min * 60
+            + sec) as u64;
         (year, month, day, hour, min, sec, long_sec)
     }
     // 获取文件起始簇号
@@ -223,7 +227,7 @@ struct LongDirectoryEntry {
 }
 
 impl LongDirectoryEntry {
-    pub(crate) fn new(order: u8, checksum: u8) -> Self {
+    pub fn new(order: u8, checksum: u8) -> Self {
         Self {
             order,
             checksum,
@@ -270,10 +274,13 @@ impl LongDirectoryEntry {
     }
 }
 
+const VOLUME_NAME_LEN: usize = 11;
+
 // 卷标目录项
+#[derive(Default)]
 struct VolumeLabelEntry {
-    name: [u8; 11],            // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
-    attribute: FileAttributes, // 删除时为0xE5
+    name: [u8; VOLUME_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
+    attribute: FileAttributes,   // 删除时为0xE5
     os_reserved: u8,
     entry_reserved_1: [u8; 9],
     modification_time: u16,
@@ -282,10 +289,17 @@ struct VolumeLabelEntry {
 }
 
 impl VolumeLabelEntry {
-    /*获取卷名*/
+    pub fn new(name: [u8; VOLUME_NAME_LEN], attribute: FileAttributes) -> Self {
+        Self {
+            name,
+            attribute,
+            ..Self::default()
+        }
+    }
+    // 获取卷名
     pub fn name(&self) -> String {
         let mut name: String = String::new();
-        for i in 0..11 {
+        for i in 0..VOLUME_NAME_LEN {
             // 记录文件名
             if self.name[i] == 0x20 {
                 break;
@@ -300,14 +314,15 @@ impl VolumeLabelEntry {
     }
     pub fn modification_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec
-        let year: u32 = ((self.modification_date & 0xFE00) >> 9) as u32 + 1980;
+        let year: u32 = ((self.modification_date & 0xFE00) >> 9) as u32 + START_YEAR;
         let month: u32 = ((self.modification_date & 0x01E0) >> 5) as u32;
         let day: u32 = (self.modification_date & 0x001F) as u32;
         let hour: u32 = ((self.modification_time & 0xF800) >> 11) as u32;
         let min: u32 = ((self.modification_time & 0x07E0) >> 5) as u32;
         let sec: u32 = ((self.modification_time & 0x001F) << 1) as u32; // 秒数需要*2
-        let long_sec: u64 =
-            ((((year - 1980) * 365 + month * 30 + day) * 24 + hour) * 3600 + min * 60 + sec) as u64;
+        let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
+            + min * 60
+            + sec) as u64;
         (year, month, day, hour, min, sec, long_sec)
     }
 }

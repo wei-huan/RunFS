@@ -13,10 +13,32 @@ pub struct VFile {
 }
 
 impl VFile {
+    pub fn new(
+        name: String,
+        short_sector: usize,
+        short_offset: usize,
+        long_pos_vec: Vec<(usize, usize)>,
+        attribute: u8,
+        fs: Arc<RwLock<RunFileSystem>>,
+        block_device: Arc<dyn BlockDevice>,
+    ) -> Self {
+        Self {
+            name,
+            short_sector,
+            short_offset,
+            long_pos_vec,
+            attribute,
+            fs,
+            block_device,
+        }
+    }
     pub fn name(&self) -> &str {
         self.name.as_str()
     }
     pub fn attribute(&self) -> u8 {
         self.attribute
+    }
+    pub fn fs(&self) -> Arc<RwLock<RunFileSystem>> {
+        self.fs.clone()
     }
 }

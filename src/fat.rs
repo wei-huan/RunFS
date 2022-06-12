@@ -9,13 +9,12 @@ const FINAL_CLUSTER: u32 = 0x0FFF_FFFF;
 /// The high 4 bits of a FAT32 FAT entry are reserved.
 /// No FAT32 volume should ever be configured containing cluster numbers available for
 /// allocation >= 0xFFFFFF7.
-/// There is no limit on the size of the FAT on volumes formatted FAT32.
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum FATEntry {
     Bad,
     Free,
-    Final,
+    End,
     Next(u32),
 }
 
@@ -68,19 +67,26 @@ impl FATManager {
             0 if (0x0FFF_FFF7..=0x0FFF_FFFF).contains(&cluster_id) => FATEntry::Bad, // avoid accidental use or allocation into a FAT chain
             0 => FATEntry::Free,
             0x0FFF_FFF7 => FATEntry::Bad,
-            0x0FFF_FFF8..=0x0FFF_FFFF => FATEntry::Final,
+            0x0FFF_FFF8..=0x0FFF_FFFF => FATEntry::End,
             _n if (0x0FFF_FFF7..=0x0FFF_FFFF).contains(&cluster_id) => FATEntry::Bad, // avoid accidental use or allocation into a FAT chain
             n => FATEntry::Next(n),
         }
     }
     fn set_entry_raw(&mut self, cluster_id: usize, value: u32) {
-        let (sector_id, _, offset) = self.position(cluster_id);
+        let (sector_id, backup_sector_id, offset) = self.position(cluster_id);
+        // FAT1
         let sector = self.sector_cache.get_cache(sector_id);
         sector.write().modify(offset, |e: &mut u32| *e = value);
+        // FAT2
+        let backup_sector = self.sector_cache.get_cache(backup_sector_id);
+        backup_sector
+            .write()
+            .modify(offset, |e: &mut u32| *e = value);
     }
     pub fn set_entry(&mut self, cluster_id: usize, entry: FATEntry) {
         assert!(
-            cluster_id <= self.bpb.total_clusters() as usize + START_CLUS_ID,
+            ((cluster_id <= self.bpb.total_clusters() as usize + START_CLUS_ID)
+                && (cluster_id >= START_CLUS_ID)),
             "Invalid Cluster ID in FAT"
         );
         let old_reserved_bits = self.entry_raw(cluster_id) & 0xF000_0000;
@@ -98,10 +104,68 @@ impl FATManager {
         let value = match entry {
             FATEntry::Free => 0,
             FATEntry::Bad => BAD_CLUSTER,
-            FATEntry::Final => FINAL_CLUSTER,
+            FATEntry::End => FINAL_CLUSTER,
             FATEntry::Next(n) => n,
         };
         let value = value | old_reserved_bits; // must preserve original reserved values
         self.set_entry_raw(cluster_id, value);
     }
+    pub fn next_cluster(&mut self, cluster_id: usize) -> Option<usize> {
+        let val = self.entry(cluster_id);
+        match val {
+            FATEntry::Next(n) => Some(n as usize),
+            _ => None,
+        }
+    }
+    pub fn set_next_cluster(&mut self, cluster_id: usize, next_cluster: u32) {
+        self.set_entry(cluster_id, FATEntry::Next(next_cluster));
+    }
+    pub fn set_end(&mut self, cluster_id: usize) {
+        self.set_entry(cluster_id, FATEntry::End);
+    }
+    pub fn set_free(&mut self, cluster_id: usize) {
+        self.set_entry(cluster_id, FATEntry::Free);
+    }
+    pub fn set_bad(&mut self, cluster_id: usize) {
+        self.set_entry(cluster_id, FATEntry::Bad);
+    }
+    pub fn final_cluster(&mut self, start_cluster: usize) -> usize {
+        let mut curr_cluster = start_cluster;
+        // assert_ne!(start_cluster, 0);
+        loop {
+            if let Some(next_cluster) = self.next_cluster(curr_cluster) {
+                curr_cluster = next_cluster;
+            } else {
+                return curr_cluster & 0x0FFFFFFF;
+            }
+        }
+    }
+    pub fn all_clusters(&mut self, start_cluster: usize) -> Vec<usize> {
+        let mut curr_cluster = start_cluster;
+        let mut clusters: Vec<usize> = Vec::new();
+        loop {
+            clusters.push(curr_cluster & 0x0FFFFFFF);
+            if let Some(next_cluster) = self.next_cluster(curr_cluster) {
+                curr_cluster = next_cluster;
+            } else {
+                return clusters;
+            }
+        }
+    }
+    pub fn count_clasters(&mut self, start_cluster: usize) -> usize {
+        let mut curr_cluster = start_cluster;
+        let mut num = 0;
+        loop {
+            num += 1;
+            if let Some(next_cluster) = self.next_cluster(curr_cluster) {
+                curr_cluster = next_cluster;
+            } else {
+                return num;
+            }
+        }
+    }
+    // pub fn find_free(&self) -> Option<usize> {
+    //     None
+    // }
+    // pub fn count_free(&self) -> usize {}
 }
