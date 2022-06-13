@@ -111,7 +111,24 @@ impl FSInfoSector {
             .unwrap();
         fsinfo_sector
     }
-
+    pub(crate) fn from_fsinfo(fsinfo: FSInfo) -> Self {
+        Self {
+            lead_signature: Self::LEAD_SIGNATURE,
+            struc_signature: Self::STRUC_SIGNATURE,
+            trail_signature: Self::TRAIL_SIGNATURE,
+            free_cluster_count: if let Some(count) = fsinfo.free_cluster_count {
+                count
+            } else {
+                NO_INFORMATION
+            },
+            next_free_cluster: if let Some(next) = fsinfo.next_free_cluster {
+                next
+            } else {
+                NO_INFORMATION
+            },
+            ..Self::default()
+        }
+    }
     #[must_use]
     pub(crate) fn validate(&self) -> Result<(), FSError> {
         if self.lead_signature != Self::LEAD_SIGNATURE

@@ -1,5 +1,7 @@
 // FAT 表结构体
-use super::{BiosParameterBlock, BlockDevice, FSInfo, SectorCacheManager, START_CLUS_ID};
+use super::{
+    BiosParameterBlock, BlockDevice, FSInfo, FSInfoSector, SectorCacheManager, START_CLUS_ID,
+};
 use std::sync::Arc;
 
 const BYTES_PER_ENTRY: usize = 4;
@@ -224,5 +226,21 @@ impl FATManager {
         } else {
             return None;
         }
+    }
+    /// 同步 FSINFO 回外存
+    pub fn sync_fsinfo(&mut self) {
+        let fsinfo_sector = FSInfoSector::from_fsinfo(self.fsinfo);
+        let cache = self
+            .sector_cache
+            .get_cache(self.bpb.fsinfo_sector() as usize);
+        cache
+            .write()
+            .modify(0, |s: &mut FSInfoSector| *s = fsinfo_sector);
+    }
+}
+
+impl Drop for FATManager {
+    fn drop(&mut self) {
+        self.sync_fsinfo()
     }
 }
