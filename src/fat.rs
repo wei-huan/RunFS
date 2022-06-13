@@ -20,8 +20,8 @@ pub enum FATEntry {
 
 /// 管理 FAT 和 FSINFO
 pub struct FATManager {
-    fsinfo: FSInfo,
-    pub bpb: Arc<BiosParameterBlock>,
+    pub fsinfo: FSInfo,
+    bpb: Arc<BiosParameterBlock>,
     pub sector_cache: SectorCacheManager,
 }
 
@@ -152,7 +152,7 @@ impl FATManager {
             }
         }
     }
-    pub fn count_clasters(&mut self, start_cluster: usize) -> usize {
+    pub fn count_clusters(&mut self, start_cluster: usize) -> usize {
         let mut curr_cluster = start_cluster;
         let mut num = 0;
         loop {
@@ -164,8 +164,65 @@ impl FATManager {
             }
         }
     }
-    // pub fn find_free(&self) -> Option<usize> {
-    //     None
-    // }
-    // pub fn count_free(&self) -> usize {}
+    /// 在 FSINFO 没有提供的情况下使用, 返回 None 代表没有空闲簇了
+    /// 如果 FSINFO 中有空簇且 id > start_cluster 就返回空簇, 否则没有就从起始簇开始线性搜索
+    pub fn search_free_cluster(&mut self, start_cluster: usize) -> Option<u32> {
+        let end_cluster = self.bpb.total_clusters() as usize + START_CLUS_ID;
+        assert!(
+            start_cluster < end_cluster,
+            "Invalid start cluster in searching"
+        );
+        let next = self.fsinfo.next_free_cluster();
+        if next.is_some() && next.unwrap() > (start_cluster as u32) {
+            return next;
+        } else {
+            // 从当前搜到末尾
+            let mut cluster_id = start_cluster;
+            while cluster_id < end_cluster {
+                if self.entry(cluster_id) == FATEntry::Free {
+                    return Some(cluster_id as u32);
+                }
+                cluster_id += 1;
+            }
+            // 从开始搜到当前
+            let end_cluster = start_cluster;
+            cluster_id = START_CLUS_ID;
+            while cluster_id < end_cluster {
+                if self.entry(cluster_id) == FATEntry::Free {
+                    return Some(cluster_id as u32);
+                }
+                cluster_id += 1;
+            }
+            return None;
+        }
+    }
+    /// 在 FSINFO 没有提供的情况下使用, 返回 0 代表没有空闲簇了
+    pub fn count_free_clusters(&mut self) -> u32 {
+        if let Some(num) = self.fsinfo.free_clusters() {
+            return num;
+        } else {
+            // 从开始搜到末尾
+            let mut cluster_id = START_CLUS_ID;
+            let mut num = 0;
+            let end_cluster = self.bpb.total_clusters() as usize + START_CLUS_ID;
+            while cluster_id < end_cluster {
+                if self.entry(cluster_id) == FATEntry::Free {
+                    num += 1;
+                }
+                cluster_id += 1;
+            }
+            return num;
+        }
+    }
+    /// 只是返回可以使用的簇 ID, 不对簇清零或者提供别的功能
+    pub fn alloc_cluster(&mut self) -> Option<u32> {
+        if let Some(free_id) = self.search_free_cluster(START_CLUS_ID) {
+            let next_free = self.search_free_cluster(free_id as usize);
+            self.fsinfo.set_next_free_cluster(next_free);
+            self.fsinfo.map_free_clusters(|n| n - 1);
+            return Some(free_id);
+        } else {
+            return None;
+        }
+    }
 }

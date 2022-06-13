@@ -1,7 +1,7 @@
 //对文件系统的全局管理.
 use super::{
     BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FATManager, FSInfo,
-    FSInfoSector, FileAttributes, ShortDirectoryEntry,
+    FSInfoSector, FileAttributes, ShortDirectoryEntry, VFile,
 };
 use spin::RwLock;
 use std::sync::Arc;
@@ -31,7 +31,11 @@ impl RunFileSystem {
             Ok(v) => v,
             Err(e) => panic!("FSInfo Block not valid: {:?}", e),
         }
-        let fsinfo = fsinfo_sector.fsinfo;
+        let mut fsinfo = FSInfo::new(
+            fsinfo_sector.free_clusters_raw(),
+            fsinfo_sector.next_free_cluster_raw(),
+        );
+        fsinfo.validate_and_fix(bpb.total_clusters());
         let mut root_dirent = ShortDirectoryEntry::new(
             [0x2F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20], // .
             [0x20, 0x20, 0x20],
@@ -59,5 +63,20 @@ impl RunFileSystem {
     }
     pub fn fsinfo(&self) -> FSInfo {
         self.fat_manager.read().fsinfo()
+    }
+    pub fn root_vfile(&self, fs_manager: &Arc<RwLock<Self>>) -> VFile {
+        let long_pos_vec: Vec<(usize, usize)> = Vec::new();
+        VFile::new(
+            String::from("/"),
+            0,
+            0,
+            long_pos_vec,
+            FileAttributes::DIRECTORY,
+            Arc::clone(fs_manager),
+            self.block_device.clone(),
+        )
+    }
+    pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
+        self.root_dirent.clone()
     }
 }

@@ -33,7 +33,7 @@ pub const LAST_LONG_ENTRY: u8 = 0x40;
 // 短目录项,也适用于当前目录项和上级目录项
 #[repr(C, packed(1))]
 #[derive(Clone, Debug, Default)]
-pub(crate) struct ShortDirectoryEntry {
+pub struct ShortDirectoryEntry {
     name: [u8; SHORT_FILE_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
     extension: [u8; SHORT_FILE_EXT_LEN],
     attribute: FileAttributes, //可以用于判断是目录还是文件或者卷标
@@ -334,4 +334,6 @@ enum DirectoryEntry {
     VolumeLabelEntry(VolumeLabelEntry),
 }
 
-impl DirectoryEntry {}
+impl DirectoryEntry {
+
+}

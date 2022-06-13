@@ -1,46 +1,77 @@
 // 对FSInfo的抽象
 
-use super::BlockDevice;
+use super::{BlockDevice, START_CLUS_ID};
 use crate::error::FSError;
 use std::slice;
 use std::sync::Arc;
 
+const NO_INFORMATION: u32 = 0xFFFFFFFF;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct FSInfo {
-    free_cluster_count: u32,
-    next_free_cluster: u32,
+    free_cluster_count: Option<u32>,
+    next_free_cluster: Option<u32>,
 }
 
 impl FSInfo {
-    #[allow(unused)]
-    const NO_INFORMATION: u32 = 0xFFFFFFFF;
-
-    #[must_use]
-    pub fn free_cluster(&self) -> u32 {
+    pub fn new(free_cluster_count: u32, next_free_cluster: u32) -> Self {
+        Self {
+            free_cluster_count: if free_cluster_count != NO_INFORMATION {
+                Some(free_cluster_count)
+            } else {
+                None
+            },
+            next_free_cluster: if free_cluster_count != NO_INFORMATION {
+                Some(next_free_cluster)
+            } else {
+                None
+            },
+        }
+    }
+    pub fn validate_and_fix(&mut self, total_clusters: u32) {
+        let max_valid_cluster_number = total_clusters + (START_CLUS_ID as u32);
+        if let Some(n) = self.free_cluster_count {
+            if n > total_clusters {
+                self.free_cluster_count = None;
+            }
+        }
+        if let Some(n) = self.next_free_cluster {
+            // values 0 and 1 are reserved
+            if n > max_valid_cluster_number || n == 0 | 1 {
+                self.next_free_cluster = None;
+            }
+        }
+    }
+    pub fn map_free_clusters(&mut self, map_fn: impl Fn(u32) -> u32) {
+        if let Some(n) = self.free_cluster_count {
+            self.free_cluster_count = Some(map_fn(n));
+        }
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn next_free_cluster(&self) -> Option<u32> {
         self.next_free_cluster
     }
-    #[must_use]
-    pub fn free_cluster_count(&self) -> u32 {
+    /// 返回 None 只是代表不确定而已
+    pub fn free_clusters(&self) -> Option<u32> {
         self.free_cluster_count
     }
-    #[must_use]
-    pub fn set_next_free_cluster(&mut self, cluster: u32) {
-        self.next_free_cluster = cluster;
+    pub fn set_next_free_cluster(&mut self, cluster_id: Option<u32>) {
+        self.next_free_cluster = cluster_id;
     }
-    #[must_use]
-    pub fn set_free_cluster_count(&mut self, free_cluster_count: u32) {
+    pub fn set_free_cluster_count(&mut self, free_cluster_count: Option<u32>) {
         self.free_cluster_count = free_cluster_count;
     }
 }
 
-#[repr(C)]
+#[repr(C, packed(1))]
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct FSInfoSector {
     lead_signature: u32,
     dummy1: [u8; 480],
     struc_signature: u32,
-    pub(crate) fsinfo: FSInfo,
+    free_cluster_count: u32,
+    next_free_cluster: u32,
     dummy2: [u8; 12],
     trail_signature: u32,
 }
@@ -51,7 +82,8 @@ impl Default for FSInfoSector {
             lead_signature: 0,
             dummy1: [0; 480],
             struc_signature: 0,
-            fsinfo: FSInfo::default(),
+            free_cluster_count: 0,
+            next_free_cluster: 0,
             dummy2: [0; 12],
             trail_signature: 0,
         }
@@ -90,5 +122,13 @@ impl FSInfoSector {
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn next_free_cluster_raw(&self) -> u32 {
+        self.next_free_cluster
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn free_clusters_raw(&self) -> u32 {
+        self.free_cluster_count
     }
 }
