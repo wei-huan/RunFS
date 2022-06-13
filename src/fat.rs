@@ -227,6 +227,14 @@ impl FATManager {
             return None;
         }
     }
+    // /// 从提供的 cluster_id 开始截断分配的簇链, 并把后面的簇都归还
+    // pub fn truncate_cluster_chain(&mut self, cluster_id: u32) {
+    //     self.fsinfo.map_free_clusters(|n| n + num_free);
+    // }
+    // /// 从提供的 cluster_id 开始归还分配的簇链
+    // pub fn free_cluster_chain(&mut self, cluster_id: u32) {
+    //     self.fsinfo.map_free_clusters(|n| n + num_free);
+    // }
     /// 同步 FSINFO 回外存
     pub fn sync_fsinfo(&mut self) {
         let fsinfo_sector = FSInfoSector::from_fsinfo(self.fsinfo);

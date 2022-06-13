@@ -21,7 +21,15 @@ INFO_CACHE_MANAGER 和 DATA_CACHE_MANAGER 应该被做进 RunFileSystem 里面, 
 
 今天是 2022 年 6 月 11 日
 info_cache_manager 和 data_cache_manager 成功整合进 RunFileSystem 里了
+
 下一步是完成目录项和FAT表的读取
 
 今天是 2022 年 6 月 13 日
 FAT 表 FSINFO 和 Cluster 分配大体完成
+
+下一步是写 FAT 表相关簇链迭代器和目录项读取,文件创建删除
+
+
+今天是 2022 年 6 月 14 日
+
+下一步需要优化结构,太多 Arc 了
