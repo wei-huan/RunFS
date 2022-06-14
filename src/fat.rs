@@ -22,7 +22,7 @@ pub enum FATEntry {
 
 /// 管理 FAT 和 FSINFO
 pub struct FATManager {
-    pub fsinfo: FSInfo,
+    fsinfo: FSInfo,
     bpb: Arc<BiosParameterBlock>,
     pub sector_cache: SectorCacheManager,
 }
@@ -42,10 +42,10 @@ impl FATManager {
     pub fn fsinfo(&self) -> FSInfo {
         self.fsinfo
     }
-    pub fn entrys_per_sector(&self) -> usize {
+    fn entrys_per_sector(&self) -> usize {
         self.bpb.bytes_per_sector() as usize / BYTES_PER_ENTRY
     }
-    pub fn position(&self, cluster_id: usize) -> (usize, usize, usize) {
+    fn position(&self, cluster_id: usize) -> (usize, usize, usize) {
         let fat_sector: usize =
             self.bpb.first_fats_sector() as usize + (cluster_id / self.entrys_per_sector());
         let backup_fat_sector: usize =
@@ -96,7 +96,7 @@ impl FATManager {
             let tmp = if cluster_id == 0x0FFF_FFF7 {
                 "BAD_CLUSTER"
             } else {
-                "end-of-chain"
+                "End-of-Chain"
             };
             panic!(
                 "cluster number {} is a special value in FAT to indicate {}; it should never be set as free",
@@ -217,12 +217,33 @@ impl FATManager {
         }
     }
     /// 只是返回可以使用的簇 ID, 不对簇清零或者提供别的功能
-    pub fn alloc_cluster(&mut self) -> Option<u32> {
+    pub fn alloc_cluster(&mut self, prev: Option<u32>) -> Option<u32> {
         if let Some(free_id) = self.search_free_cluster(START_CLUS_ID) {
+            self.set_entry(free_id as usize, FATEntry::End);
+            if let Some(prev) = prev {
+                self.set_entry(prev as usize, FATEntry::Next(free_id));
+            }
             let next_free = self.search_free_cluster(free_id as usize);
             self.fsinfo.set_next_free_cluster(next_free);
             self.fsinfo.map_free_clusters(|n| n - 1);
             return Some(free_id);
+        } else {
+            return None;
+        }
+    }
+    /// 只是返回可以使用的第一个簇 ID, 如果需要的簇不够, 就直接返回 None
+    pub fn alloc_clusters(&mut self, num: usize, prev: Option<u32>) -> Option<u32> {
+        let free_clusters = self.fsinfo.free_clusters();
+        if free_clusters.is_some() && num <= free_clusters.unwrap() as usize {
+            let mut prev = prev;
+            let mut first: Option<u32> = None;
+            for i in 0..num {
+                prev = self.alloc_cluster(prev);
+                if i == 0 {
+                    first = prev;
+                }
+            }
+            return first;
         } else {
             return None;
         }
