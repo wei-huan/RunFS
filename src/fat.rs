@@ -24,7 +24,7 @@ pub enum FATEntry {
 pub struct FATManager {
     fsinfo: FSInfo,
     bpb: Arc<BiosParameterBlock>,
-    pub sector_cache: SectorCacheManager,
+    sector_cache: SectorCacheManager,
 }
 
 impl FATManager {
