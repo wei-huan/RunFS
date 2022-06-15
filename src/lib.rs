@@ -2,6 +2,7 @@ mod block_device;
 mod boot_sector;
 mod cluster_cache;
 mod config;
+mod data;
 mod dir_entry;
 mod error;
 mod fat;
@@ -11,7 +12,8 @@ mod sector_cache;
 mod vfs;
 
 use cluster_cache::ClusterCacheManager;
-use dir_entry::{ShortDirectoryEntry, FileAttributes};
+use data::DataManager;
+use dir_entry::{FileAttributes, LongDirectoryEntry, ShortDirectoryEntry};
 use fat::FATManager;
 use fsinfo::{FSInfo, FSInfoSector};
 use sector_cache::SectorCacheManager;

@@ -193,6 +193,9 @@ impl BiosParameterBlock {
     pub fn total_sectors_32(&self) -> u32 {
         self.total_sectors_32
     }
+    pub fn root_dir_cluster(&self) -> u32 {
+        self.root_dir_cluster
+    }
     pub fn reserved_sectors(&self) -> u32 {
         u32::from(self.reserved_sectors)
     }
@@ -221,8 +224,8 @@ impl BiosParameterBlock {
         let data_sectors = total_sectors - first_data_sector;
         data_sectors / u32::from(self.sectors_per_cluster)
     }
-    pub fn cluster_size(&self) -> u32 {
-        u32::from(self.sectors_per_cluster) * u32::from(self.bytes_per_sector)
+    pub fn cluster_size(&self) -> usize {
+        usize::from(self.sectors_per_cluster) * usize::from(self.bytes_per_sector)
     }
     pub fn fsinfo_sector(&self) -> u32 {
         u32::from(self.fsinfo_sector)

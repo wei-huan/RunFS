@@ -51,6 +51,9 @@ impl ClusterCache {
             block_dev,
         }
     }
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
     pub fn cache_ref(&self) -> &[u8] {
         &self.cache
     }

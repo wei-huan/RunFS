@@ -3,9 +3,7 @@ use bitflags::bitflags;
 const START_YEAR: u32 = 1980;
 
 pub(crate) const DIRENT_SZ: u32 = 32; // 目录项字节数
-
 pub(crate) const DIR_ENTRY_DELETED_FLAG: u8 = 0xE5;
-
 pub(crate) const SHORT_FILE_NAME_LEN: usize = 8;
 pub(crate) const SHORT_FILE_EXT_LEN: usize = 3;
 
@@ -19,7 +17,7 @@ bitflags! {
         const SYSTEM     = 0x04;
         const VOLUME_ID  = 0x08;
         const DIRECTORY  = 0x10;
-        const ARCHIVE    = 0x20;
+        const ARCHIVE    = 0x20;    // 确定是否需要写回外存,在文件的创建,调整,重命名时需要置位
         const LONG_NAME  = Self::READ_ONLY.bits | Self::HIDDEN.bits
                         | Self::SYSTEM.bits | Self::VOLUME_ID.bits;
         const LONG_NAME_MASK = Self::READ_ONLY.bits | Self::HIDDEN.bits
@@ -124,19 +122,25 @@ impl ShortDirectoryEntry {
         (year, month, day, hour, min, sec, long_sec)
     }
     // 获取文件起始簇号
-    pub fn first_cluster(&self) -> Option<u32> {
-        let n = ((self.cluster_high as u32) << 16) + (self.cluster_low as u32);
-        if n == 0 {
-            None
-        } else {
-            Some(n)
-        }
+    pub fn first_cluster(&self) -> u32 {
+        ((self.cluster_high as u32) << 16) + (self.cluster_low as u32)
+        // let n = ((self.cluster_high as u32) << 16) + (self.cluster_low as u32);
+        // if n == 0 {
+        //     None
+        // } else {
+        //     Some(n)
+        // }
     }
-    pub fn set_first_cluster(&mut self, cluster: Option<u32>) {
-        let n = cluster.unwrap_or(0);
-        self.cluster_high = (n >> 16) as u16;
-        self.cluster_low = (n & 0xFFFF) as u16;
+    // 设置文件起始簇号
+    pub fn set_first_cluster(&mut self, cluster: u32) {
+        self.cluster_high = ((cluster & 0xFFFF0000) >> 16) as u16;
+        self.cluster_low = (cluster & 0x0000FFFF) as u16;
     }
+    // pub fn set_first_cluster(&mut self, cluster: Option<u32>) {
+    //     let n = cluster.unwrap_or(0);
+    //     self.cluster_high = (n >> 16) as u16;
+    //     self.cluster_low = (n & 0x00FF) as u16;
+    // }
     pub fn size(&self) -> Option<u32> {
         if self.is_file() {
             Some(self.size)
@@ -211,12 +215,12 @@ impl ShortDirectoryEntry {
 // 长目录项, 一般来说现在的 OS 无论创建的文件或目录名字是否超出短目录项要求都会在短目录项前添加长目录项
 #[repr(C, packed(1))]
 #[derive(Clone, Debug, Default)]
-struct LongDirectoryEntry {
+pub struct LongDirectoryEntry {
     // use Unicode !!!
     // 如果是该文件的最后一个长文件名目录项，
     // 则将该目录项的序号与 0x40 进行“或（OR）运算”的结果写入该位置。
     // 长文件名要有\0
-    order: u8,                 // 删除时为0xE5
+    order: u8,                 // 从1开始计数, 删除时为0xE5
     name1: [u8; 10],           // 5characters
     attribute: FileAttributes, // should be 0x0F
     type_: u8,
@@ -334,6 +338,4 @@ enum DirectoryEntry {
     VolumeLabelEntry(VolumeLabelEntry),
 }
 
-impl DirectoryEntry {
-
-}
+impl DirectoryEntry {}

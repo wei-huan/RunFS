@@ -39,6 +39,14 @@ impl FATManager {
             sector_cache: SectorCacheManager::new(bpb, block_device),
         }
     }
+    /// 返回 None 只是代表不确定而已
+    pub fn next_free_cluster(&self) -> Option<u32> {
+        self.fsinfo.next_free_cluster()
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn free_clusters(&self) -> Option<u32> {
+        self.fsinfo.free_clusters()
+    }
     pub fn fsinfo(&self) -> FSInfo {
         self.fsinfo
     }
@@ -235,12 +243,12 @@ impl FATManager {
     pub fn alloc_clusters(&mut self, num: usize, prev: Option<u32>) -> Option<u32> {
         let free_clusters = self.fsinfo.free_clusters();
         if free_clusters.is_some() && num <= free_clusters.unwrap() as usize {
-            let mut prev = prev;
+            let mut prev_id = prev;
             let mut first: Option<u32> = None;
             for i in 0..num {
-                prev = self.alloc_cluster(prev);
+                prev_id = self.alloc_cluster(prev_id);
                 if i == 0 {
-                    first = prev;
+                    first = prev_id;
                 }
             }
             return first;

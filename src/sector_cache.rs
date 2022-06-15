@@ -42,12 +42,12 @@ impl BlockCache {
             block_dev,
         }
     }
-    pub fn cache_ref(&self) -> &[u8] {
-        &self.cache
-    }
-    pub fn cache_mut(&mut self) -> &mut [u8] {
-        &mut self.cache
-    }
+    // pub fn cache_ref(&self) -> &[u8] {
+    //     &self.cache
+    // }
+    // pub fn cache_mut(&mut self) -> &mut [u8] {
+    //     &mut self.cache
+    // }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,

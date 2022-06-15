@@ -1,17 +1,17 @@
 //对文件系统的全局管理.
 use super::{
-    BiosParameterBlock, BlockDevice, BootSector, ClusterCacheManager, FATManager, FSInfo,
-    FSInfoSector, FileAttributes, ShortDirectoryEntry, VFile,
+    BiosParameterBlock, BlockDevice, BootSector, DataManager, FATManager, FSInfo, FSInfoSector,
+    FileAttributes, ShortDirectoryEntry, VFile,
 };
-use spin::RwLock;
+use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
 
 // 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
     bpb: Arc<BiosParameterBlock>,
-    pub fat_manager: Arc<RwLock<FATManager>>,
-    pub block_device: Arc<dyn BlockDevice>,
-    pub cluster_cache: ClusterCacheManager,
+    fat_manager: Arc<RwLock<FATManager>>,
+    data_manager: Arc<RwLock<DataManager>>,
+    block_device: Arc<dyn BlockDevice>,
     root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
@@ -41,12 +41,15 @@ impl RunFileSystem {
             [0x20, 0x20, 0x20],
             FileAttributes::DIRECTORY,
         );
-        root_dirent.set_first_cluster(Some(2));
+        root_dirent.set_first_cluster(Some(bpb.root_dir_cluster()));
         Self {
             bpb: bpb.clone(),
-            cluster_cache: ClusterCacheManager::new(bpb.clone(), Arc::clone(&block_device)),
             fat_manager: Arc::new(RwLock::new(FATManager::new(
                 fsinfo,
+                bpb.clone(),
+                Arc::clone(&block_device),
+            ))),
+            data_manager: Arc::new(RwLock::new(DataManager::new(
                 bpb.clone(),
                 Arc::clone(&block_device),
             ))),
@@ -61,8 +64,49 @@ impl RunFileSystem {
     pub fn bpb(&self) -> Arc<BiosParameterBlock> {
         self.bpb.clone()
     }
+    pub fn fat_manager_read(&self) -> RwLockReadGuard<FATManager> {
+        self.fat_manager.read()
+    }
+    pub fn fat_manager_modify(&self) -> RwLockWriteGuard<FATManager> {
+        self.fat_manager.write()
+    }
+    pub fn data_manager_read(&self) -> RwLockReadGuard<DataManager> {
+        self.data_manager.read()
+    }
+    pub fn data_manager_modify(&self) -> RwLockWriteGuard<DataManager> {
+        self.data_manager.write()
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn next_free_cluster(&self) -> Option<u32> {
+        self.fat_manager_read().next_free_cluster()
+    }
+    /// 返回 None 只是代表不确定而已
+    pub fn free_clusters(&self) -> Option<u32> {
+        self.fat_manager_read().free_clusters()
+    }
     pub fn fsinfo(&self) -> FSInfo {
-        self.fat_manager.read().fsinfo()
+        self.fat_manager_read().fsinfo()
+    }
+    /// 在 FAT 表中分配项并清空对应簇中的数据, 成功返回 id, 失败返回 None
+    pub fn alloc_cluster(&mut self) -> Option<u32> {
+        if let Some(cluster_id) = self.fat_manager.write().alloc_cluster(None) {
+            self.data_manager.write().clear_cluster(cluster_id as usize);
+            return Some(cluster_id);
+        }
+        return None;
+    }
+    /// 在 FAT 表中分配多个项并清空对应簇中的数据, 成功返回分配的第一个 id, 失败返回 None
+    pub fn alloc_clusters(&mut self, num: usize) -> Option<u32> {
+        let mut fat_manager = self.fat_manager.write();
+        if let Some(first_cluster) = fat_manager.alloc_clusters(num, None) {
+            let id_vec = fat_manager.all_clusters(first_cluster as usize);
+            for id in id_vec {
+                self.data_manager.write().clear_cluster(id);
+            }
+            return Some(first_cluster);
+        } else {
+            return None;
+        }
     }
     pub fn root_vfile(&self, fs_manager: &Arc<RwLock<Self>>) -> VFile {
         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
