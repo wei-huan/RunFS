@@ -332,7 +332,7 @@ impl VolumeLabelEntry {
 }
 
 /// 目录项抽象
-enum DirectoryEntry {
+pub enum DirectoryEntry {
     LongDirectoryEntry(LongDirectoryEntry),
     ShortDirectoryEntry(ShortDirectoryEntry),
     VolumeLabelEntry(VolumeLabelEntry),

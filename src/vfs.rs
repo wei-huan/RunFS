@@ -1,16 +1,16 @@
-use super::{BlockDevice, FileAttributes, LongDirectoryEntry, RunFileSystem, ShortDirectoryEntry};
+/// 虚拟文件系统, 将实际文件系统抽象成满足文件,文件夹创建读写删除功能的抽象文件系统
+use super::{FileAttributes, LongDirectoryEntry, RunFileSystem, ShortDirectoryEntry};
 use spin::RwLock;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct VFile {
     name: String,
-    short_cluster: usize,
-    short_offset: usize,               //文件短目录项所在扇区和偏移
+    short_cluster: usize,              // 文件短目录项所在扇区
+    short_offset: usize,               // 文件短目录项所在偏移
     long_pos_vec: Vec<(usize, usize)>, // 长目录项的位置<cluster, offset>
     attribute: FileAttributes,
     fs: Arc<RwLock<RunFileSystem>>,
-    block_device: Arc<dyn BlockDevice>,
 }
 
 impl VFile {
@@ -21,7 +21,6 @@ impl VFile {
         long_pos_vec: Vec<(usize, usize)>,
         attribute: FileAttributes,
         fs: Arc<RwLock<RunFileSystem>>,
-        block_device: Arc<dyn BlockDevice>,
     ) -> Self {
         Self {
             name,
@@ -30,7 +29,6 @@ impl VFile {
             long_pos_vec,
             attribute,
             fs,
-            block_device,
         }
     }
     pub fn name(&self) -> &str {
@@ -45,45 +43,44 @@ impl VFile {
     pub fn is_dir(&self) -> bool {
         self.attribute().contains(FileAttributes::DIRECTORY)
     }
-    pub fn read_short_dirent<V>(&self, f: impl FnOnce(&ShortDirectoryEntry) -> V) -> V {
-        let runfs = self.fs.read();
-        if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
-            let root_dirent = runfs.root_dirent();
-            let rr = root_dirent.read();
-            f(&rr)
-        } else {
-            runfs
-                .data_manager_modify()
-                .read_cluster_at(self.short_cluster, self.short_offset, f)
-        }
-    }
-    pub fn modify_short_dirent<V>(&self, f: impl FnOnce(&mut ShortDirectoryEntry) -> V) -> V {
-        let runfs = self.fs.read();
-        if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
-            let root_dirent = runfs.root_dirent();
-            let mut rw = root_dirent.write();
-            f(&mut rw)
-        } else {
-            runfs
-                .data_manager_modify()
-                .write_cluster_at(self.short_cluster, self.short_offset, f)
-        }
-    }
-    fn modify_long_dirent<V>(
-        &self,
-        index: usize,
-        f: impl FnOnce(&mut LongDirectoryEntry) -> V,
-    ) -> V {
-        let runfs = self.fs.read();
-        let (cluster, offset) = self.long_pos_vec[index];
-        runfs
-            .data_manager_modify()
-            .write_cluster_at(cluster, offset, f)
-    }
+    // pub fn read_short_dirent<V>(&self, f: impl FnOnce(&ShortDirectoryEntry) -> V) -> V {
+    //     let runfs = self.fs.read();
+    //     if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
+    //         let root_dirent = runfs.root_dirent();
+    //         let rr = root_dirent.read();
+    //         f(&rr)
+    //     } else {
+    //         runfs
+    //             .data_manager_modify()
+    //             .read_cluster_at(self.short_cluster, self.short_offset, f)
+    //     }
+    // }
+    // pub fn modify_short_dirent<V>(&self, f: impl FnOnce(&mut ShortDirectoryEntry) -> V) -> V {
+    //     let runfs = self.fs.read();
+    //     if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
+    //         let root_dirent = runfs.root_dirent();
+    //         let mut rw = root_dirent.write();
+    //         f(&mut rw)
+    //     } else {
+    //         runfs
+    //             .data_manager_modify()
+    //             .write_cluster_at(self.short_cluster, self.short_offset, f)
+    //     }
+    // }
+    // fn modify_long_dirent<V>(
+    //     &self,
+    //     index: usize,
+    //     f: impl FnOnce(&mut LongDirectoryEntry) -> V,
+    // ) -> V {
+    //     let runfs = self.fs.read();
+    //     let (cluster, offset) = self.long_pos_vec[index];
+    //     runfs
+    //         .data_manager_modify()
+    //         .write_cluster_at(cluster, offset, f)
+    // }
     pub fn first_cluster(&self) -> u32 {
         self.read_short_dirent(|se: &ShortDirectoryEntry| se.first_cluster())
     }
-
     pub fn set_first_cluster(&self, clu: u32) {
         self.modify_short_dirent(|se: &mut ShortDirectoryEntry| {
             se.set_first_cluster(clu);
@@ -191,24 +188,66 @@ impl VFile {
     //     }
     // }
 
-    /* WAITING 目前只支持删除自己*/
-    pub fn remove(&self) -> usize {
-        let first_cluster: u32 = self.first_cluster();
-        for i in 0..self.long_pos_vec.len() {
-            self.modify_long_dirent(i, |long_ent: &mut LongDirectoryEntry| {
-                long_ent.delete();
-            });
+    // /* WAITING 目前只支持删除自己*/
+    // pub fn remove(&self) -> usize {
+    //     let first_cluster: u32 = self.first_cluster();
+    //     for i in 0..self.long_pos_vec.len() {
+    //         self.modify_long_dirent(i, |long_ent: &mut LongDirectoryEntry| {
+    //             long_ent.delete();
+    //         });
+    //     }
+    //     self.modify_short_dirent(|short_ent: &mut ShortDirectoryEntry| {
+    //         short_ent.delete();
+    //     });
+    //     let all_clusters = self
+    //         .fs
+    //         .read()
+    //         .get_fat()
+    //         .read()
+    //         .get_all_cluster_of(first_cluster, self.block_device.clone());
+    //     self.fs.write().dealloc_cluster(all_clusters.clone());
+    //     return all_clusters.len();
+    // }
+
+    // 根据名称搜索
+    pub fn find_vfile_byname(&self, name: &str) -> Option<VFile> {
+        assert!(self.is_dir());
+        let mut name_and_ext: Vec<&str> = name.split(".").collect();
+        if name_and_ext.len() == 1 {
+            name_and_ext.push("");
         }
-        self.modify_short_dirent(|short_ent: &mut ShortDirectoryEntry| {
-            short_ent.delete();
-        });
-        let all_clusters = self
-            .fs
-            .read()
-            .get_fat()
-            .read()
-            .get_all_cluster_of(first_cluster, self.block_device.clone());
-        self.fs.write().dealloc_cluster(all_clusters.clone());
-        return all_clusters.len();
+        let name = name_and_ext[0].as_bytes();
+        let ext = name_and_ext[1].as_bytes();
+        // FAT32目录没有大小，只能搜，read_at已经做了完善的适配
+        self.read_short_dirent(|short_ent: &ShortDirectoryEntry| {
+            if name.len() > 8 || ext.len() > 3 {
+                // 长文件名
+                return self.find_long_name(name, short_ent);
+            } else {
+                // 短文件名
+                return self.find_short_name(name, short_ent);
+            }
+        })
+    }
+
+    // 根据路径递归搜索, 需要区分是绝对路径还是相对路径
+    pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
+        let _ = self.fs.read(); // 获取读锁
+        let len = path.len();
+        if len == 0 {
+            return None;
+        }
+        let mut current_vfile = self.clone();
+        for i in 0..len {
+            if path[i] == "" || path[i] == "." {
+                continue;
+            }
+            if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
+                current_vfile = vfile;
+            } else {
+                return None;
+            }
+        }
+        Some(Arc::new(current_vfile))
     }
 }

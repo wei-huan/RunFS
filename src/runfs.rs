@@ -12,7 +12,6 @@ pub struct RunFileSystem {
     fat_manager: Arc<RwLock<FATManager>>,
     data_manager: Arc<RwLock<DataManager>>,
     block_device: Arc<dyn BlockDevice>,
-    root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
 }
 
 impl RunFileSystem {
@@ -41,7 +40,7 @@ impl RunFileSystem {
             [0x20, 0x20, 0x20],
             FileAttributes::DIRECTORY,
         );
-        root_dirent.set_first_cluster(Some(bpb.root_dir_cluster()));
+        root_dirent.set_first_cluster(bpb.root_dir_cluster());
         Self {
             bpb: bpb.clone(),
             fat_manager: Arc::new(RwLock::new(FATManager::new(
@@ -51,10 +50,10 @@ impl RunFileSystem {
             ))),
             data_manager: Arc::new(RwLock::new(DataManager::new(
                 bpb.clone(),
+                Arc::new(RwLock::new(root_dirent)),
                 Arc::clone(&block_device),
             ))),
             block_device,
-            root_dirent: Arc::new(RwLock::new(root_dirent)),
         }
     }
     /// Returns a volume identifier read from BPB in the Boot Sector.
@@ -117,10 +116,9 @@ impl RunFileSystem {
             long_pos_vec,
             FileAttributes::DIRECTORY,
             Arc::clone(fs_manager),
-            self.block_device.clone(),
         )
     }
-    pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
-        self.root_dirent.clone()
-    }
+    // pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
+    //     self.root_dirent.clone()
+    // }
 }
