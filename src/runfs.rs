@@ -11,7 +11,6 @@ pub struct RunFileSystem {
     bpb: Arc<BiosParameterBlock>,
     fat_manager: Arc<RwLock<FATManager>>,
     data_manager: Arc<RwLock<DataManager>>,
-    block_device: Arc<dyn BlockDevice>,
 }
 
 impl RunFileSystem {
@@ -53,7 +52,6 @@ impl RunFileSystem {
                 Arc::new(RwLock::new(root_dirent)),
                 Arc::clone(&block_device),
             ))),
-            block_device,
         }
     }
     /// Returns a volume identifier read from BPB in the Boot Sector.
@@ -107,15 +105,16 @@ impl RunFileSystem {
             return None;
         }
     }
-    pub fn root_vfile(&self, fs_manager: &Arc<RwLock<Self>>) -> VFile {
+    pub fn root_vfile(&self, runfs: &Arc<RwLock<Self>>) -> VFile {
+        let short_cluster = runfs.read().bpb().root_dir_cluster() as usize;
         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
         VFile::new(
             String::from("/"),
-            0,
+            short_cluster,
             0,
             long_pos_vec,
             FileAttributes::DIRECTORY,
-            Arc::clone(fs_manager),
+            Arc::clone(runfs),
         )
     }
     // pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {

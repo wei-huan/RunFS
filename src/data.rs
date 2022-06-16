@@ -1,8 +1,7 @@
 use super::{
-    BiosParameterBlock, BlockDevice, ClusterCacheManager, DirectoryEntry, LongDirectoryEntry,
-    ShortDirectoryEntry,
+    BiosParameterBlock, BlockDevice, ClusterCacheManager, LongDirectoryEntry, ShortDirectoryEntry,
 };
-use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use spin::RwLock;
 use std::sync::Arc;
 
 pub struct DataManager {
@@ -54,7 +53,9 @@ impl DataManager {
         f: impl FnOnce(&T) -> V,
     ) -> V {
         let cache = self.cluster_cache.get_cache(cluster_id);
-        f(cache.read().get_ref(offset))
+        let cache_read = cache.read();
+        let cache_ref = cache_read.get_ref(offset);
+        f(cache_ref)
     }
     pub fn write_cluster_at<T, V>(
         &mut self,
@@ -63,38 +64,38 @@ impl DataManager {
         f: impl FnOnce(&mut T) -> V,
     ) -> V {
         let cache = self.cluster_cache.get_cache(cluster_id);
-        f(cache.write().get_mut(offset))
+        let mut cache_write = cache.write();
+        let cache_mut = cache_write.get_mut(offset);
+        f(cache_mut)
     }
     pub fn read_short_dirent<V>(
-        &self,
+        &mut self,
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&ShortDirectoryEntry) -> V,
     ) -> V {
         if cluster_id == self.bpb.root_dir_cluster() as usize {
-            let root_dirent = self.root_dirent;
-            let rr = root_dirent.read();
+            let rr = self.root_dirent.read();
             f(&rr)
         } else {
             self.read_cluster_at(cluster_id, offset, f)
         }
     }
     pub fn modify_short_dirent<V>(
-        &self,
+        &mut self,
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&mut ShortDirectoryEntry) -> V,
     ) -> V {
         if cluster_id == self.bpb.root_dir_cluster() as usize {
-            let root_dirent = self.root_dirent;
-            let mut rw = root_dirent.write();
+            let mut rw = self.root_dirent.write();
             f(&mut rw)
         } else {
             self.write_cluster_at(cluster_id, offset, f)
         }
     }
     fn read_long_dirent<V>(
-        &self,
+        &mut self,
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&LongDirectoryEntry) -> V,
@@ -102,22 +103,11 @@ impl DataManager {
         self.read_cluster_at(cluster_id, offset, f)
     }
     fn modify_long_dirent<V>(
-        &self,
+        &mut self,
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&mut LongDirectoryEntry) -> V,
     ) -> V {
         self.write_cluster_at(cluster_id, offset, f)
-    }
-    fn modify_dirent<V>(
-        &self,
-        cluster_id: usize,
-        offset: usize,
-        f: impl FnOnce(&mut DirectoryEntry) -> V,
-    ) -> V {
-        match f {
-            FnOnce(&mut DirectoryEntry::ShortDirectoryEntry) => self.modify_short_dirent(cluster_id, offset, f),
-            DirectoryEntry::LongDirectoryEntry => self.modify_long_dirent(cluster_id, offset, f),
-        }
     }
 }

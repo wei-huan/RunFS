@@ -256,6 +256,18 @@ impl FATManager {
             return None;
         }
     }
+    /// 返回簇链中第 n 个元素的 id
+    pub fn search_cluster(&mut self, chain_start_cluster: usize, index: usize) -> Option<usize> {
+        let mut curr_cluster = chain_start_cluster;
+        for _ in 0..index {
+            if let Some(next_cluster) = self.next_cluster(curr_cluster) {
+                curr_cluster = next_cluster;
+            } else {
+                return None;
+            }
+        }
+        return Some(curr_cluster);
+    }
     // /// 从提供的 cluster_id 开始截断分配的簇链, 并把后面的簇都归还
     // pub fn truncate_cluster_chain(&mut self, cluster_id: u32) {
     //     self.fsinfo.map_free_clusters(|n| n + num_free);

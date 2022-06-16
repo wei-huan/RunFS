@@ -153,7 +153,7 @@ impl BiosParameterBlock {
             return Err(FSError::CorruptedFileSystem);
         }
         let total_fat_entries =
-            self.fats_sectors() * u32::from(self.bytes_per_sector) * 8 / DIRENT_SZ;
+            self.fats_sectors() * u32::from(self.bytes_per_sector) * 8 / (DIRENT_SZ as u32);
         let usable_fat_entries: u32 = total_fat_entries - u32::try_from(START_CLUS_ID).unwrap();
         if usable_fat_entries < total_clusters {
             println!(
@@ -207,7 +207,7 @@ impl BiosParameterBlock {
     }
     // FAT32 读出来的没有用
     pub fn root_dir_sectors(&self) -> u32 {
-        let root_dir_bytes = u32::from(self.root_entries) * DIRENT_SZ;
+        let root_dir_bytes = u32::from(self.root_entries) * (DIRENT_SZ as u32);
         (root_dir_bytes + u32::from(self.bytes_per_sector) - 1) / u32::from(self.bytes_per_sector)
     }
     pub fn sectors_per_all_fats(&self) -> u32 {

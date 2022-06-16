@@ -23,7 +23,8 @@ impl ClusterCache {
         let end_cluster_id: usize = total_clusters + START_CLUS_ID;
         assert!(
             cluster_id >= START_CLUS_ID && cluster_id <= end_cluster_id,
-            "cluster id not in data range"
+            "cluster id {} not in data range ",
+            cluster_id
         );
         let sectors_per_cluster: usize = bpb.sectors_per_cluster().try_into().unwrap();
         let data_start_sector: usize = bpb.first_data_sector().try_into().unwrap();
@@ -54,12 +55,12 @@ impl ClusterCache {
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-    pub fn cache_ref(&self) -> &[u8] {
-        &self.cache
-    }
-    pub fn cache_mut(&mut self) -> &mut [u8] {
-        &mut self.cache
-    }
+    // pub fn cache_ref(&self) -> &[u8] {
+    //     &self.cache
+    // }
+    // pub fn cache_mut(&mut self) -> &mut [u8] {
+    //     &mut self.cache
+    // }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
@@ -90,9 +91,6 @@ impl ClusterCache {
     }
     pub fn modify<T, V>(&mut self, offset: usize, f: impl FnOnce(&mut T) -> V) -> V {
         f(self.get_mut(offset))
-    }
-    pub fn is_modify(&self) -> bool {
-        self.modified
     }
     fn set_modify(&mut self) {
         self.modified = true

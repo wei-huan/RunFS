@@ -1,8 +1,11 @@
+use super::RunFileSystem;
 use bitflags::bitflags;
+use spin::RwLock;
+use std::sync::Arc;
 
 const START_YEAR: u32 = 1980;
 
-pub(crate) const DIRENT_SZ: u32 = 32; // 目录项字节数
+pub(crate) const DIRENT_SZ: usize = 32; // 目录项字节数
 pub(crate) const DIR_ENTRY_DELETED_FLAG: u8 = 0xE5;
 pub(crate) const SHORT_FILE_NAME_LEN: usize = 8;
 pub(crate) const SHORT_FILE_EXT_LEN: usize = 3;
@@ -11,6 +14,7 @@ bitflags! {
     /// A FAT file attributes.
     /// 目录项 ATTRIBUTE 字节最高两位是保留不用的
     #[derive(Default)]
+    #[repr(C, packed(1))]
     pub struct FileAttributes: u8 {
         const READ_ONLY  = 0x01;
         const HIDDEN     = 0x02;
@@ -30,7 +34,7 @@ pub const LAST_LONG_ENTRY: u8 = 0x40;
 
 // 短目录项,也适用于当前目录项和上级目录项
 #[repr(C, packed(1))]
-#[derive(Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct ShortDirectoryEntry {
     name: [u8; SHORT_FILE_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
     extension: [u8; SHORT_FILE_EXT_LEN],
@@ -78,8 +82,14 @@ impl ShortDirectoryEntry {
     pub fn is_empty(&self) -> bool {
         self.name[0] == 0x00
     }
+    pub fn is_free(&self) -> bool {
+        self.is_deleted() || self.is_empty()
+    }
     pub fn is_file(&self) -> bool {
         (!self.is_dir()) && (!self.is_volume())
+    }
+    pub fn is_short(&self) -> bool {
+        !self.attribute.contains(FileAttributes::LONG_NAME)
     }
     pub fn get_creation_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec-long_sec
@@ -89,11 +99,11 @@ impl ShortDirectoryEntry {
         let hour: u32 = ((self.creation_time & 0xF800) >> 11) as u32;
         let min: u32 = ((self.creation_time & 0x07E0) >> 5) as u32;
         let sec: u32 = ((self.creation_time & 0x001F) << 1) as u32; // 秒数需要*2
-        let long_sec: u64 =
-            ((((year - 1980) * 365 + month * 30 + day) * 24 + hour) * 3600 + min * 60 + sec) as u64;
+        let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
+            + min * 60
+            + sec) as u64;
         (year, month, day, hour, min, sec, long_sec)
     }
-
     pub fn modification_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec
         let year: u32 = ((self.modification_date & 0xFE00) >> 9) as u32 + START_YEAR;
@@ -107,7 +117,6 @@ impl ShortDirectoryEntry {
             + sec) as u64;
         (year, month, day, hour, min, sec, long_sec)
     }
-
     pub fn accessed_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec
         let year: u32 = ((self.last_acc_date & 0xFE00) >> 9) as u32 + START_YEAR;
@@ -151,7 +160,7 @@ impl ShortDirectoryEntry {
     pub fn set_size(&mut self, size: u32) {
         self.size = size;
     }
-    // 获取短文件名
+    // 获取短文件名,短文件名默认都是大写
     pub fn name(&self) -> String {
         let mut name: String = String::new();
         for i in 0..8 {
@@ -175,7 +184,7 @@ impl ShortDirectoryEntry {
         }
         name
     }
-    /* 计算校验和 */
+    /// 计算校验和
     pub fn checksum(&self) -> u8 {
         let mut name_buff: [u8; 11] = [0u8; 11];
         let mut sum: u8 = 0;
@@ -209,6 +218,147 @@ impl ShortDirectoryEntry {
                 DIRENT_SZ.try_into().unwrap(),
             )
         }
+    }
+    /// 获取文件偏移量所在的簇和偏移
+    pub fn pos(&self, offset: usize, fs: &Arc<RwLock<RunFileSystem>>) -> (Option<usize>, usize) {
+        let runfs = fs.read();
+        let bytes_per_sector = runfs.bpb().bytes_per_sector() as usize;
+        let bytes_per_cluster = runfs.bpb().cluster_size() as usize;
+        let cluster_index = offset / bytes_per_cluster;
+        let current_cluster = runfs
+            .fat_manager_modify()
+            .search_cluster(self.first_cluster() as usize, cluster_index);
+        (current_cluster, offset % bytes_per_sector)
+    }
+    /// 以偏移量读取文件, 返回实际读取的长度
+    pub fn read_at(
+        &self,
+        offset: usize,
+        buf: &mut [u8],
+        runfs: &Arc<RwLock<RunFileSystem>>,
+    ) -> usize {
+        let cluster_size = runfs.read().bpb().cluster_size();
+        let mut current_offset = offset;
+        let mut size = self.size as usize;
+        if self.is_dir() {
+            // 计算文件夹占用的空间
+            size = cluster_size
+                * runfs
+                    .read()
+                    .fat_manager_modify()
+                    .count_clusters(self.first_cluster() as usize);
+        }
+        let offset_end_pos = offset + buf.len().min(size);
+        // println!(
+        //     "In read_at current_offset = {}; offset_end_pos = {}",
+        //     current_offset, offset_end_pos
+        // );
+        if current_offset >= offset_end_pos {
+            return 0;
+        }
+        let (cluster_id, _) = self.pos(offset, runfs);
+        if cluster_id.is_none() {
+            return 0;
+        };
+        let mut current_cluster = cluster_id.unwrap();
+        // println!("current_cluster = {}", current_cluster);
+        let mut read_size = 0usize;
+        loop {
+            // 将偏移量向上对齐簇大小
+            let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
+            current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
+            // println!("current_cluster_end_pos = {}", current_cluster_end_pos);
+            // 开始读
+            let cluster_read_size = current_cluster_end_pos - current_offset;
+            let offset_in_cluster = current_offset % cluster_size;
+            let dst = &mut buf[read_size..read_size + cluster_read_size];
+            for i in 0..cluster_read_size {
+                runfs.read().data_manager_modify().read_cluster_at(
+                    current_cluster,
+                    offset_in_cluster + i,
+                    |data: &u8| {
+                        dst[i] = *data;
+                    },
+                );
+            }
+            // 更新读取长度
+            read_size += cluster_read_size;
+            if current_cluster_end_pos == offset_end_pos {
+                break;
+            }
+            // 更新索引参数
+            current_offset = current_cluster_end_pos;
+            let next_cluster = runfs
+                .read()
+                .fat_manager_modify()
+                .next_cluster(current_cluster);
+            // 没有下一个簇
+            if next_cluster.is_none() {
+                break;
+            }
+            current_cluster = next_cluster.unwrap();
+        }
+        read_size
+    }
+
+    /// 以偏移量写文件
+    pub fn write_at(&self, offset: usize, buf: &[u8], runfs: &Arc<RwLock<RunFileSystem>>) -> usize {
+        let cluster_size = runfs.read().bpb().cluster_size() as usize;
+        let mut current_off = offset;
+        let end_pos: usize;
+        if self.is_dir() {
+            let size = cluster_size
+                * runfs
+                    .read()
+                    .fat_manager_modify()
+                    .count_clusters(self.first_cluster() as usize) as usize;
+            end_pos = offset + buf.len().min(size); // DEBUG:约束上界
+        } else {
+            end_pos = (offset + buf.len()).min(self.size as usize);
+        }
+        if current_off >= end_pos {
+            return 0;
+        }
+        let (cluster_id, _) = self.pos(offset, runfs);
+        if cluster_id.is_none() {
+            return 0;
+        };
+        let mut current_cluster = cluster_id.unwrap();
+        let mut write_size = 0usize;
+        loop {
+            // 将偏移量向上对齐扇区大小一般是512
+            let mut end_current_cluster = (current_off / cluster_size + 1) * cluster_size;
+            end_current_cluster = end_current_cluster.min(end_pos);
+            // 写
+            let cluster_write_size = end_current_cluster - current_off;
+            let src = &buf[write_size..write_size + cluster_write_size];
+            for i in 0..cluster_write_size {
+                runfs.read().data_manager_modify().write_cluster_at(
+                    current_cluster,
+                    current_off + i,
+                    |data: &mut u8| {
+                        *data = src[i];
+                    },
+                );
+            }
+            // 更新写入长度
+            write_size += cluster_write_size;
+            if end_current_cluster == end_pos {
+                break;
+            }
+            // 更新索引参数
+            current_off = end_current_cluster;
+            let next_cluster = runfs
+                .read()
+                .fat_manager_modify()
+                .next_cluster(current_cluster);
+            // 没有下一个簇
+            if next_cluster.is_none() {
+                break;
+            }
+            current_cluster = next_cluster.unwrap();
+        }
+        write_size
     }
 }
 
@@ -250,6 +400,12 @@ impl LongDirectoryEntry {
     }
     pub fn is_deleted(&self) -> bool {
         self.order == DIR_ENTRY_DELETED_FLAG
+    }
+    pub fn is_free(&self) -> bool {
+        self.is_empty() || self.is_deleted()
+    }
+    pub fn is_long(&self) -> bool {
+        self.attribute.contains(FileAttributes::LONG_NAME)
     }
     pub fn set_deleted(&mut self) {
         self.order = DIR_ENTRY_DELETED_FLAG;
@@ -331,11 +487,11 @@ impl VolumeLabelEntry {
     }
 }
 
-/// 目录项抽象
-pub enum DirectoryEntry {
-    LongDirectoryEntry(LongDirectoryEntry),
-    ShortDirectoryEntry(ShortDirectoryEntry),
-    VolumeLabelEntry(VolumeLabelEntry),
-}
+// /// 目录项抽象
+// pub enum DirectoryEntry {
+//     LongDirectoryEntry(LongDirectoryEntry),
+//     ShortDirectoryEntry(ShortDirectoryEntry),
+//     VolumeLabelEntry(VolumeLabelEntry),
+// }
 
-impl DirectoryEntry {}
+// impl DirectoryEntry {}
