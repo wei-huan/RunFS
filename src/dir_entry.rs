@@ -9,6 +9,7 @@ pub(crate) const DIRENT_SZ: usize = 32; // 目录项字节数
 pub(crate) const DIR_ENTRY_DELETED_FLAG: u8 = 0xE5;
 pub(crate) const SHORT_FILE_NAME_LEN: usize = 8;
 pub(crate) const SHORT_FILE_EXT_LEN: usize = 3;
+pub(crate) const SHORT_FILE_NAME_PADDING: u8 = b' ';
 pub(crate) const SHORT_NAME_LEN: usize = SHORT_FILE_NAME_LEN + SHORT_FILE_EXT_LEN;
 pub(crate) const LONG_NAME_LEN: usize = 13;
 
@@ -367,14 +368,11 @@ impl ShortDirectoryEntry {
     }
 }
 
-// 长目录项, 一般来说现在的 OS 无论创建的文件或目录名字是否超出短目录项要求都会在短目录项前添加长目录项
+/// 长目录项, 一般来说现在的 OS 无论创建的文件或目录的名字是否超
+/// 出短目录项要求都会在短目录项前添加长目录项
 #[repr(C, packed(1))]
 #[derive(Default)]
 pub struct LongDirectoryEntry {
-    // use Unicode !!!
-    // 如果是该文件的最后一个长文件名目录项，
-    // 则将该目录项的序号与 0x40 进行“或（OR）运算”的结果写入该位置。
-    // 长文件名要有\0
     order: u8,                 // 从1开始计数, 删除时为0xE5
     name1: [u16; 5],           // 5characters
     attribute: FileAttributes, // should be 0x0F
@@ -386,7 +384,7 @@ pub struct LongDirectoryEntry {
 }
 
 impl LongDirectoryEntry {
-    pub fn new(order: u8, checksum: u8) -> Self {
+    pub fn new(name: [u16; LONG_NAME_LEN], order: u8, checksum: u8) -> Self {
         Self {
             order,
             checksum,
@@ -456,7 +454,7 @@ impl LongDirectoryEntry {
 
 // const VOLUME_NAME_LEN: usize = 11;
 
-// // 卷标目录项
+// 卷标目录项
 // #[derive(Default)]
 // struct VolumeLabelEntry {
 //     name: [u8; VOLUME_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充

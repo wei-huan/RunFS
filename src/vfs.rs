@@ -1,7 +1,8 @@
 /// 虚拟文件系统, 将实际文件系统抽象成满足文件,文件夹创建读写删除功能的抽象文件系统
 use super::{
     FileAttributes, LongDirectoryEntry, RunFileSystem, ShortDirectoryEntry, DIRENT_SZ,
-    LONG_NAME_LEN,
+    LAST_LONG_ENTRY, LONG_NAME_LEN, SHORT_FILE_EXT_LEN, SHORT_FILE_NAME_LEN,
+    SHORT_FILE_NAME_PADDING, SHORT_NAME_LEN,
 };
 use spin::RwLock;
 use std::sync::Arc;
@@ -23,6 +24,70 @@ pub fn long_name_split(name: &str) -> Vec<[u16; LONG_NAME_LEN]> {
         name_vec.push(last);
     }
     name_vec
+}
+
+fn copy_short_name_part(dst: &mut [u8], src: &str) -> (usize, bool, bool) {
+    let mut dst_pos = 0;
+    let mut lossy_conv = false;
+    for c in src.chars() {
+        if dst_pos == dst.len() {
+            // result buffer is full
+            return (dst_pos, false, lossy_conv);
+        }
+        // Make sure character is allowed in 8.3 name
+        #[rustfmt::skip]
+        let fixed_c = match c {
+            // strip spaces and dots
+            ' ' | '.' => {
+                lossy_conv = true;
+                continue;
+            },
+            // copy allowed characters
+            'A'..='Z' | 'a'..='z' | '0'..='9'
+            | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '-' | '@' | '^' | '_' | '`' | '{' | '}' | '~' => c,
+            // replace disallowed characters by underscore
+            _ => '_',
+        };
+        // Update 'lossy conversion' flag
+        lossy_conv = lossy_conv || (fixed_c != c);
+        // short name is always uppercase
+        let upper = fixed_c.to_ascii_uppercase();
+        dst[dst_pos] = upper as u8; // SAFE: upper is in range 0x20-0x7F
+        dst_pos += 1;
+    }
+    (dst_pos, true, lossy_conv)
+}
+
+/// 由长文件名生成短文件名
+pub fn generate_short_name(name: &str) -> [u8; SHORT_NAME_LEN] {
+    // padded by ' '
+    let mut short_name = [SHORT_FILE_NAME_PADDING; SHORT_NAME_LEN];
+    // find extension after last dot
+    // Note: short file name cannot start with the extension
+    let dot_index_opt = name[1..].rfind('.').map(|index| index + 1);
+    // copy basename (part of filename before a dot)
+    let basename_src = dot_index_opt.map_or(name, |dot_index| &name[..dot_index]);
+    let (basename_len, basename_fits, basename_lossy) =
+        copy_short_name_part(&mut short_name[0..8], basename_src);
+    // copy file extension if exists
+    let (name_fits, lossy_conv) =
+        dot_index_opt.map_or((basename_fits, basename_lossy), |dot_index| {
+            let (_, ext_fits, ext_lossy) =
+                copy_short_name_part(&mut short_name[8..11], &name[dot_index + 1..]);
+            (basename_fits && ext_fits, basename_lossy || ext_lossy)
+        });
+    short_name
+}
+
+/// 拆分文件名和后缀
+pub fn split_name_ext<'a>(name: &'a str) -> (&'a str, &'a str) {
+    let mut name_and_ext: Vec<&str> = name.split(".").collect();
+    let name = name_and_ext[0];
+    if name_and_ext.len() == 1 {
+        name_and_ext.push("");
+    }
+    let ext = name_and_ext[1];
+    (name, ext)
 }
 
 /// 对目录项的再一层抽象,可以理解对文件夹或文件的抽象
@@ -75,41 +140,6 @@ impl VFile {
     pub fn is_file(&self) -> bool {
         !self.is_dir()
     }
-    // pub fn read_short_dirent<V>(&self, f: impl FnOnce(&ShortDirectoryEntry) -> V) -> V {
-    //     let runfs = self.fs.read();
-    //     if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
-    //         let root_dirent = runfs.root_dirent();
-    //         let rr = root_dirent.read();
-    //         f(&rr)
-    //     } else {
-    //         runfs
-    //             .data_manager_modify()
-    //             .read_cluster_at(self.short_cluster, self.short_offset, f)
-    //     }
-    // }
-    // pub fn modify_short_dirent<V>(&self, f: impl FnOnce(&mut ShortDirectoryEntry) -> V) -> V {
-    //     let runfs = self.fs.read();
-    //     if self.short_cluster == runfs.bpb().root_dir_cluster() as usize {
-    //         let root_dirent = runfs.root_dirent();
-    //         let mut rw = root_dirent.write();
-    //         f(&mut rw)
-    //     } else {
-    //         runfs
-    //             .data_manager_modify()
-    //             .write_cluster_at(self.short_cluster, self.short_offset, f)
-    //     }
-    // }
-    // fn modify_long_dirent<V>(
-    //     &self,
-    //     index: usize,
-    //     f: impl FnOnce(&mut LongDirectoryEntry) -> V,
-    // ) -> V {
-    //     let runfs = self.fs.read();
-    //     let (cluster, offset) = self.long_pos_vec[index];
-    //     runfs
-    //         .data_manager_modify()
-    //         .write_cluster_at(cluster, offset, f)
-    // }
     pub fn first_cluster(&self) -> u32 {
         self.fs.read().data_manager_modify().read_short_dirent(
             self.short_cluster,
@@ -256,7 +286,6 @@ impl VFile {
             }
         }
     }
-
     /// 根据名称搜索, 默认用长文件名搜索, 搜不到再用短文件名搜
     pub fn find_vfile_byname(&self, name: &str) -> Option<VFile> {
         assert!(self.is_dir());
@@ -281,106 +310,118 @@ impl VFile {
             return self.find_short_name(&name, &short_entry);
         }
     }
-
     /// 根据路径递归搜索, 需要区分是绝对路径还是相对路径
-    // pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
-    //     let _ = self.fs.read(); // 获取读锁
-    //     let len = path.len();
-    //     if len == 0 {
-    //         return None;
-    //     }
-    //     let mut current_vfile = self.clone();
-    //     for i in 0..len {
-    //         if path[i] == "" || path[i] == "." {
-    //             continue;
-    //         }
-    //         if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
-    //             current_vfile = vfile;
-    //         } else {
-    //             return None;
-    //         }
-    //     }
-    //     Some(Arc::new(current_vfile))
-    // }
-
-    /// 在当前目录下创建文件
-    // pub fn create(&self, name: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
-    //     // 检测同名文件
-    //     assert!(self.is_dir());
-    //     let runfs = self.fs.read();
-    //     let (name_, ext_) = runfs.split_name_ext(name);
-    //     // 搜索空处
-    //     let mut dirent_offset: usize;
-    //     if let Some(offset) = self.find_free_dirent() {
-    //         dirent_offset = offset;
-    //     } else {
-    //         return None;
-    //     }
-    //     let mut short_ent = ShortDirectoryEntry::default();
-    //     if name_.len() > 8 || ext_.len() > 3 {
-    //         // 长文件名拆分
-    //         let mut v_long_name = runfs.long_name_split(name);
-    //         let long_ent_num = v_long_name.len();
-    //         let mut long_ent = LongDirectoryEntry::default();
-    //         // 生成短文件名及对应目录项
-    //         let short_name = runfs.generate_short_name(name);
-    //         let (name_bytes, ext_bytes) = runfs.short_name_format(short_name.as_str());
-    //         short_ent.initialize(&name_bytes, &ext_bytes, attribute);
-    //         let check_sum = short_ent.checksum();
-    //         //println!("*** aft checksum");
-    //         drop(runfs);
-    //         // 写长名目录项
-    //         for i in 0..long_ent_num {
-    //             let mut order: u8 = (long_ent_num - i) as u8;
-    //             if i == 0 {
-    //                 order |= 0x40;
-    //             }
-    //             long_ent.initialize(v_long_name.pop().unwrap().as_bytes(), order, check_sum);
-    //             assert_eq!(
-    //                 self.write_at(dirent_offset, long_ent.as_bytes_mut()),
-    //                 DIRENT_SZ
-    //             );
-    //             dirent_offset += DIRENT_SZ;
-    //         }
-    //     } else {
-    //         // 短文件名格式化
-    //         let (name_bytes, ext_bytes) = manager_reader.short_name_format(name);
-    //         short_ent.initialize(&name_bytes, &ext_bytes, attribute);
-    //         short_ent.set_case(ALL_LOWER_CASE);
-    //         drop(manager_reader);
-    //     }
-    //     // 写短目录项
-    //     assert_eq!(
-    //         self.write_at(dirent_offset, short_ent.as_bytes_mut()),
-    //         DIRENT_SZ
-    //     );
-
-    //     // 如果是目录类型，需要创建.和..
-    //     if let Some(vfile) = self.find_vfile_byname(name) {
-    //         if attribute & ATTRIBUTE_DIRECTORY != 0 {
-    //             let manager_reader = self.fs.read();
-    //             let (name_bytes, ext_bytes) = manager_reader.short_name_format(".");
-    //             let mut self_dir =
-    //                 ShortDirectoryEntry::new(&name_bytes, &ext_bytes, ATTRIBUTE_DIRECTORY);
-    //             let (name_bytes, ext_bytes) = manager_reader.short_name_format("..");
-    //             let mut par_dir =
-    //                 ShortDirectoryEntry::new(&name_bytes, &ext_bytes, ATTRIBUTE_DIRECTORY);
-    //             drop(manager_reader);
-    //             par_dir.set_first_cluster(self.first_cluster());
-
-    //             vfile.write_at(0, self_dir.as_bytes_mut());
-    //             vfile.write_at(DIRENT_SZ, par_dir.as_bytes_mut());
-    //             let first_cluster =
-    //                 vfile.read_short_dirent(|se: &ShortDirectoryEntry| se.first_cluster());
-    //             self_dir.set_first_cluster(first_cluster);
-    //             vfile.write_at(0, self_dir.as_bytes_mut());
-    //         }
-    //         return Some(Arc::new(vfile));
-    //     } else {
-    //         None
-    //     }
-    // }
-
+    pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
+        let _ = self.fs.read(); // 获取读锁
+        let len = path.len();
+        if len == 0 {
+            return None;
+        }
+        let mut current_vfile = self.clone();
+        for i in 0..len {
+            if path[i] == "" || path[i] == "." {
+                continue;
+            }
+            if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
+                current_vfile = vfile;
+            } else {
+                return None;
+            }
+        }
+        Some(Arc::new(current_vfile))
+    }
+    /// 查找可用目录项，返回 offset，簇不够也会返回相应的 offset，caller 需要及时分配
+    fn find_free_dirent(&self) -> Option<usize> {
+        if self.is_file() {
+            return None;
+        }
+        let mut offset = 0;
+        loop {
+            let mut tmp_dirent = ShortDirectoryEntry::default();
+            let read_sz = self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |short_ent: &ShortDirectoryEntry| {
+                    short_ent.read_at(offset, tmp_dirent.as_bytes_mut(), &self.fs)
+                },
+            );
+            if tmp_dirent.is_free() || read_sz == 0 {
+                return Some(offset);
+            }
+            offset += DIRENT_SZ;
+        }
+    }
+    /// 在当前目录下创建文件或目录
+    pub fn create(&self, filename: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
+        // 检测同名文件
+        assert!(self.is_dir());
+        // 搜索空处
+        let mut dirent_offset: usize;
+        if let Some(offset) = self.find_free_dirent() {
+            dirent_offset = offset;
+        } else {
+            return None;
+        }
+        // 长文件名拆分
+        let mut long_name_vec = long_name_split(filename);
+        let long_entry_num = long_name_vec.len();
+        // 生成短文件名及对应目录项
+        let short_name: [u8; SHORT_NAME_LEN] = generate_short_name(filename);
+        let mut name = [0u8; SHORT_FILE_NAME_LEN];
+        name.copy_from_slice(&short_name[0..SHORT_FILE_NAME_LEN]);
+        let mut ext = [0u8; SHORT_FILE_EXT_LEN];
+        ext.copy_from_slice(&short_name[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
+        let short_entry = ShortDirectoryEntry::new(name, ext, attribute);
+        let checksum = short_entry.checksum();
+        // 写长名目录项
+        for i in 0..long_entry_num {
+            let mut order: u8 = (long_entry_num - i) as u8;
+            if i == 0 {
+                order |= LAST_LONG_ENTRY;
+            }
+            let long_entry = LongDirectoryEntry::new(long_name_vec.pop().unwrap(), order, checksum);
+            assert_eq!(
+                self.write_at(dirent_offset, long_entry.as_bytes()),
+                DIRENT_SZ
+            );
+            dirent_offset += DIRENT_SZ;
+        }
+        // 写短目录项
+        assert_eq!(
+            self.write_at(dirent_offset, short_entry.as_bytes()),
+            DIRENT_SZ
+        );
+        if let Some(vfile) = self.find_vfile_byname(filename) {
+            // 如果是目录类型，需要创建.和..
+            if attribute.contains(FileAttributes::DIRECTORY) {
+                let dot: [u8; SHORT_NAME_LEN] = generate_short_name(".");
+                let mut name = [0u8; SHORT_FILE_NAME_LEN];
+                name.copy_from_slice(&dot[0..SHORT_FILE_NAME_LEN]);
+                let mut ext = [0u8; SHORT_FILE_EXT_LEN];
+                ext.copy_from_slice(&dot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
+                let mut self_dir = ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY);
+                let dotdot: [u8; SHORT_NAME_LEN] = generate_short_name("..");
+                let mut name = [0u8; SHORT_FILE_NAME_LEN];
+                name.copy_from_slice(&dotdot[0..SHORT_FILE_NAME_LEN]);
+                let mut ext = [0u8; SHORT_FILE_EXT_LEN];
+                ext.copy_from_slice(&dotdot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
+                let mut parent_dir = ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY);
+                parent_dir.set_first_cluster(self.first_cluster());
+                vfile.write_at(0, self_dir.as_bytes_mut());
+                vfile.write_at(DIRENT_SZ, parent_dir.as_bytes_mut());
+                let first_cluster = self.fs.read().data_manager_modify().read_short_dirent(
+                    self.short_cluster,
+                    self.short_offset,
+                    |se: &ShortDirectoryEntry| se.first_cluster(),
+                );
+                self_dir.set_first_cluster(first_cluster);
+                vfile.write_at(0, self_dir.as_bytes_mut());
+            }
+            return Some(Arc::new(vfile));
+        } else {
+            None
+        }
+    }
     /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹
     pub fn delete(&self) -> usize {
         let first_cluster: u32 = self.first_cluster();

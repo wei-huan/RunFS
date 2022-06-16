@@ -143,9 +143,9 @@ impl SectorCacheManager {
             sector_cache
         }
     }
-    pub fn info_cache_sync_all(&mut self) {
-        for (_, cache) in self.queue.iter() {
-            cache.write().sync();
-        }
-    }
+    // pub fn info_cache_sync_all(&mut self) {
+    //     for (_, cache) in self.queue.iter() {
+    //         cache.write().sync();
+    //     }
+    // }
 }

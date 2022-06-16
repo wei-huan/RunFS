@@ -161,9 +161,9 @@ impl ClusterCacheManager {
             cluster_cache
         }
     }
-    pub fn data_cache_sync_all(&mut self) {
-        for (_, cache) in self.queue.iter() {
-            cache.write().sync();
-        }
-    }
+    // pub fn data_cache_sync_all(&mut self) {
+    //     for (_, cache) in self.queue.iter() {
+    //         cache.write().sync();
+    //     }
+    // }
 }

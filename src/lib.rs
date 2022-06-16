@@ -14,7 +14,9 @@ mod vfs;
 use cluster_cache::ClusterCacheManager;
 use data::DataManager;
 use dir_entry::{
-    FileAttributes, LongDirectoryEntry, ShortDirectoryEntry, DIRENT_SZ, LONG_NAME_LEN,
+    FileAttributes, LongDirectoryEntry, ShortDirectoryEntry, DIRENT_SZ, LAST_LONG_ENTRY,
+    LONG_NAME_LEN, SHORT_FILE_EXT_LEN, SHORT_FILE_NAME_LEN, SHORT_FILE_NAME_PADDING,
+    SHORT_NAME_LEN,
 };
 use fat::FATManager;
 use fsinfo::{FSInfo, FSInfoSector};
