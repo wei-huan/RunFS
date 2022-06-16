@@ -1,7 +1,29 @@
 /// 虚拟文件系统, 将实际文件系统抽象成满足文件,文件夹创建读写删除功能的抽象文件系统
-use super::{FileAttributes, LongDirectoryEntry, RunFileSystem, ShortDirectoryEntry, DIRENT_SZ};
+use super::{
+    FileAttributes, LongDirectoryEntry, RunFileSystem, ShortDirectoryEntry, DIRENT_SZ,
+    LONG_NAME_LEN,
+};
 use spin::RwLock;
 use std::sync::Arc;
+
+/// 将长文件名拆分
+pub fn long_name_split(name: &str) -> Vec<[u16; LONG_NAME_LEN]> {
+    let name_u16: Vec<u16> = name.encode_utf16().collect();
+    let chunks = name_u16.as_slice().chunks_exact(LONG_NAME_LEN);
+    let mut name_vec: Vec<[u16; LONG_NAME_LEN]> = Vec::new();
+    let remainder = chunks.remainder();
+    let remainder_len = remainder.len();
+    for data in chunks {
+        name_vec.push(data.try_into().unwrap());
+    }
+    if remainder_len > 0 {
+        let mut last: [u16; LONG_NAME_LEN] = [0xFFFF; LONG_NAME_LEN];
+        last[0..remainder_len].copy_from_slice(remainder);
+        last[remainder_len] = 0x0000;
+        name_vec.push(last);
+    }
+    name_vec
+}
 
 /// 对目录项的再一层抽象,可以理解对文件夹或文件的抽象
 #[derive(Clone)]
@@ -113,94 +135,86 @@ impl VFile {
             |short_ent: &mut ShortDirectoryEntry| short_ent.write_at(offset, buf, &self.fs),
         )
     }
+    /// 长文件名方式搜索, 只支持本级搜索, 不支持递归搜索
+    fn find_long_name(&self, name: &str, dir_entry: &ShortDirectoryEntry) -> Option<VFile> {
+        // 名字已经做了逆序处理
+        let name_vec: Vec<[u16; 13]> = long_name_split(name).into_iter().rev().collect();
+        let entry_num = name_vec.len();
+        let mut long_entry = LongDirectoryEntry::default();
+        let mut long_pos_vec: Vec<(usize, usize)> = Vec::new();
+        let mut offset: usize = 0;
+        let name_last = name_vec[0];
+        loop {
+            long_pos_vec.clear();
+            // 读取 offset 处的目录项
+            let mut read_sz = dir_entry.read_at(offset, long_entry.as_bytes_mut(), &self.fs);
+            if read_sz != DIRENT_SZ || long_entry.is_empty() {
+                return None;
+            }
+            if long_entry.name_to_array() == name_last && long_entry.is_long() {
+                let order = long_entry.order();
+                let raw_order = long_entry.raw_order();
+                let long_checksum = long_entry.checksum();
+                if !long_entry.is_last()
+                    || long_entry.is_free()
+                    || raw_order != entry_num as u8
+                {
+                    offset += DIRENT_SZ;
+                    continue;
+                }
+                // 如果 order 也匹配，开一个循环继续匹配长名目录项
+                let mut is_match = true;
+                for i in 1..(raw_order as usize) {
+                    read_sz = dir_entry.read_at(
+                        offset + i * DIRENT_SZ,
+                        long_entry.as_bytes_mut(),
+                        &self.fs,
+                    );
+                    if read_sz != DIRENT_SZ {
+                        return None;
+                    }
+                    if long_entry.name_to_array() != name_vec[i] || !long_entry.is_long() {
+                        is_match = false;
+                        break;
+                    }
+                }
+                if is_match {
+                    // 如果成功，读短目录项，进行校验
+                    let mut short_entry = ShortDirectoryEntry::default();
+                    let short_offset = offset + entry_num * DIRENT_SZ;
+                    read_sz = dir_entry.read_at(short_offset, short_entry.as_bytes_mut(), &self.fs);
+                    if read_sz != DIRENT_SZ {
+                        return None;
+                    }
+                    if !short_entry.is_free() && long_checksum == short_entry.checksum() {
+                        let (short_cluster, short_offset) = dir_entry.pos(short_offset, &self.fs);
+                        for i in 0..order as usize {
+                            // 存入长名目录项位置了，第一个在栈顶
+                            let (long_cluster, offset) = dir_entry.pos(offset + i, &self.fs);
+                            long_pos_vec.push((long_cluster.unwrap(), offset));
+                        }
+                        return Some(VFile::new(
+                            String::from(name),
+                            short_cluster.unwrap(),
+                            short_offset,
+                            long_pos_vec,
+                            short_entry.attribute(),
+                            self.fs.clone(),
+                        ));
+                    } else {
+                        return None; // QUES
+                    }
+                } else {
+                    offset += DIRENT_SZ;
+                    continue;
+                }
+            } else {
+                offset += DIRENT_SZ;
+            }
+        }
+    }
 
-    /// 长文件名方式搜索
-    // fn find_long_name(&self, name: &str, dir_ent: &ShortDirectoryEntry) -> Option<VFile> {
-    //     let name_vec = self.fs.read().long_name_split(name);
-    //     let mut offset: usize = 0;
-    //     let mut long_ent = LongDirectoryEntry::default();
-    //     let long_ent_num = name_vec.len();
-    //     let mut long_pos_vec: Vec<(usize, usize)> = Vec::new();
-    //     let name_last = name_vec[long_ent_num - 1].clone();
-    //     let mut step: usize = long_ent_num;
-    //     for i in (long_ent_num - 2)..0 {
-    //         if name_last == name_vec[i] {
-    //             // step = step - i - 1;
-    //             break;
-    //         }
-    //     }
-    //     step = 1;
-    //     loop {
-    //         long_pos_vec.clear();
-    //         // 读取offset处的目录项
-    //         let mut read_sz = dir_ent.read_at(offset, long_ent.as_bytes_mut(), &self.fs);
-    //         if read_sz != DIRENT_SZ || long_ent.is_empty() {
-    //             return None;
-    //         }
-    //         if long_ent.get_name_raw() == name_last && long_ent.attribute() == ATTRIBUTE_LFN {
-    //             // 匹配：如果名一致，且第一字段为0x4*，获取该order，以及校验和
-    //             let mut order = long_ent.order();
-    //             let l_checksum = long_ent.checksum();
-    //             if order & 0x40 == 0 || order == 0xE5 {
-    //                 offset += step * DIRENT_SZ;
-    //                 continue;
-    //             }
-    //             order = order ^ 0x40;
-    //             if order as usize != long_ent_num {
-    //                 offset += step * DIRENT_SZ;
-    //                 continue;
-    //             }
-    //             // 如果order也匹配，开一个循环继续匹配长名目录项
-    //             let mut is_match = true;
-    //             for i in 1..order as usize {
-    //                 read_sz =
-    //                     dir_ent.read_at(offset + i * DIRENT_SZ, long_ent.as_bytes_mut(), &self.fs);
-    //                 if read_sz != DIRENT_SZ {
-    //                     return None;
-    //                 }
-    //                 if long_ent.get_name_raw() != name_vec[long_ent_num - 1 - i]
-    //                     || long_ent.attribute() != ATTRIBUTE_LFN
-    //                 {
-    //                     is_match = false;
-    //                     break;
-    //                 }
-    //             }
-    //             if is_match {
-    //                 // 如果成功，读短目录项，进行校验
-    //                 let mut short_ent = ShortDirectoryEntry::default();
-    //                 let s_off = offset + long_ent_num * DIRENT_SZ;
-    //                 read_sz = dir_ent.read_at(s_off, short_ent.as_bytes_mut(), &self.fs);
-    //                 if read_sz != DIRENT_SZ {
-    //                     return None;
-    //                 }
-    //                 if short_ent.is_valid() && l_checksum == short_ent.checksum() {
-    //                     let (short_sector, short_offset) = self.get_pos(s_off);
-    //                     for i in 0..order as usize {
-    //                         // 存入长名目录项位置了，第一个在栈顶
-    //                         let pos = self.get_pos(offset + i);
-    //                         long_pos_vec.push(pos);
-    //                     }
-    //                     return Some(VFile::new(
-    //                         String::from(name),
-    //                         short_sector,
-    //                         short_offset,
-    //                         long_pos_vec,
-    //                         short_ent.attribute(),
-    //                     ));
-    //                 } else {
-    //                     return None; // QUES
-    //                 }
-    //             } else {
-    //                 offset += step * DIRENT_SZ;
-    //                 continue;
-    //             }
-    //         } else {
-    //             offset += step * DIRENT_SZ;
-    //         }
-    //     }
-    // }
-
-    /// 短文件名搜索
+    /// 短文件名搜索, 只支持本级搜索, 不支持递归搜索
     fn find_short_name(&self, name: &str, dirent: &ShortDirectoryEntry) -> Option<VFile> {
         let name_upper = name.to_uppercase();
         let mut short_entry = ShortDirectoryEntry::default();
@@ -240,42 +254,42 @@ impl VFile {
         if split_name.len() == 1 {
             split_name.push("");
         }
-        let name_len = split_name[0].len();
-        let extension_len = split_name[1].len();
         let mut short_entry = ShortDirectoryEntry::default();
         self.fs.read().data_manager_modify().read_short_dirent(
             self.short_cluster,
             self.short_offset,
             |entry: &ShortDirectoryEntry| short_entry = *entry,
         );
-        // if name_len > 8 || extension_len > 3 {
-        //     // 长文件名
-        //     return self.find_long_name(name, &short_entry);
-        // }
-        // 短文件名
-        return self.find_short_name(&name, &short_entry);
+        // 长文件名
+        let res = self.find_long_name(name, &short_entry);
+        if res.is_some() {
+            return res;
+        } else {
+            // 短文件名
+            return self.find_short_name(&name, &short_entry);
+        }
     }
 
     /// 根据路径递归搜索, 需要区分是绝对路径还是相对路径
-    pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
-        let _ = self.fs.read(); // 获取读锁
-        let len = path.len();
-        if len == 0 {
-            return None;
-        }
-        let mut current_vfile = self.clone();
-        for i in 0..len {
-            if path[i] == "" || path[i] == "." {
-                continue;
-            }
-            if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
-                current_vfile = vfile;
-            } else {
-                return None;
-            }
-        }
-        Some(Arc::new(current_vfile))
-    }
+    // pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
+    //     let _ = self.fs.read(); // 获取读锁
+    //     let len = path.len();
+    //     if len == 0 {
+    //         return None;
+    //     }
+    //     let mut current_vfile = self.clone();
+    //     for i in 0..len {
+    //         if path[i] == "" || path[i] == "." {
+    //             continue;
+    //         }
+    //         if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
+    //             current_vfile = vfile;
+    //         } else {
+    //             return None;
+    //         }
+    //     }
+    //     Some(Arc::new(current_vfile))
+    // }
 
     /// 在当前目录下创建文件
     // pub fn create(&self, name: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
