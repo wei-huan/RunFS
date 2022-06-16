@@ -1,5 +1,4 @@
-use runfs::{BlockDevice, IOError, RunFileSystem, VFile};
-use spin::RwLock;
+use runfs::{BlockDevice, BootSector, IOError, RunFileSystem};
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -53,31 +52,34 @@ impl BlockDevice for FileEmulateBlockDevice {
 const IMG: &str = "assets/fat32_1.img";
 
 #[test]
-fn test_find_file_short() {
+fn check_boot_sector() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("FUCK").unwrap();
-    println!("file: {:#X?}", vfile.name());
+    let boot_sector = BootSector::directly_new(Arc::new(file_block_device));
+    println!("boot_sector: {:#X?}", boot_sector);
 }
-
 #[test]
-fn test_find_file_long() {
+fn create_file_system() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("mount").unwrap();
-    println!("file: {:#X?}", vfile.name());
-    println!("file long_pos: {:#?}", vfile.long_pos());
-    println!("file short_pos: {:#?}", vfile.short_pos());
+    let runfs = RunFileSystem::new(Arc::new(file_block_device));
+    println!("BPB: {:#X?}", runfs.bpb());
 }
-
-// #[test]
-// fn test_delete_file() {
-//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-//     let vfile = root_dir.find_vfile_byname("open").unwrap();
-//     println!("file: {:#X?}", vfile.name());
-//     vfile.delete();
-// }
+#[test]
+fn check_file_system() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = RunFileSystem::new(Arc::new(file_block_device));
+    println!("runfs_size: {:#?}", core::mem::size_of::<RunFileSystem>());
+    let bpb = runfs.bpb();
+    let fsinfo = runfs.fsinfo();
+    println!("fats_sectors: {:#?}", bpb.fats_sectors());
+    println!("total_sectors_32: {:#?}", bpb.total_sectors_32());
+    println!("reserved_sectors: {:#?}", bpb.reserved_sectors());
+    println!("root_dir_sectors: {:#?}", bpb.root_dir_sectors());
+    println!("sectors_per_all_fats: {:#?}", bpb.sectors_per_all_fats());
+    println!("first_data_sector: {:#?}", bpb.first_data_sector());
+    println!("total_clusters: {:#?}", bpb.total_clusters());
+    println!("cluster_size: {:#?}", bpb.cluster_size());
+    println!("fsinfo_sector: {:#?}", bpb.fsinfo_sector());
+    println!("backup_boot_sector: {:#?}", bpb.backup_boot_sector());
+    println!("free_cluster: {:#?}", fsinfo.next_free_cluster());
+    println!("free_cluster_count: {:#?}", fsinfo.free_clusters());
+}

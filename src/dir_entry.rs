@@ -9,6 +9,7 @@ pub(crate) const DIRENT_SZ: usize = 32; // 目录项字节数
 pub(crate) const DIR_ENTRY_DELETED_FLAG: u8 = 0xE5;
 pub(crate) const SHORT_FILE_NAME_LEN: usize = 8;
 pub(crate) const SHORT_FILE_EXT_LEN: usize = 3;
+pub(crate) const SHORT_NAME_LEN: usize = SHORT_FILE_NAME_LEN + SHORT_FILE_EXT_LEN;
 pub(crate) const LONG_NAME_LEN: usize = 13;
 
 bitflags! {
@@ -187,19 +188,23 @@ impl ShortDirectoryEntry {
     }
     /// 计算校验和
     pub fn checksum(&self) -> u8 {
-        let mut name_buff: [u8; 11] = [0u8; 11];
+        let mut name_buff: [u8; SHORT_NAME_LEN] = [0x20u8; SHORT_NAME_LEN];
         let mut sum: u8 = 0;
-        for i in 0..8 {
+        let mut temp: u16;
+        for i in 0..SHORT_FILE_NAME_LEN {
             name_buff[i] = self.name[i];
         }
-        for i in 0..3 {
-            name_buff[i + 8] = self.extension[i];
+        for i in 0..SHORT_FILE_EXT_LEN {
+            name_buff[i + SHORT_FILE_NAME_LEN] = self.extension[i];
         }
-        for i in 0..11 {
+        println!("name_buff: {:#?}", name_buff);
+        for i in 0..SHORT_NAME_LEN {
             if (sum & 1) != 0 {
-                sum = 0x80 + (sum >> 1) + name_buff[i];
+                temp = 0x80 + (sum >> 1) as u16 + name_buff[i] as u16;
+                sum = (temp & 0xFF) as u8;
             } else {
-                sum = (sum >> 1) + name_buff[i];
+                temp = (sum >> 1) as u16 + name_buff[i] as u16;
+                sum = (temp & 0xFF) as u8;
             }
         }
         sum

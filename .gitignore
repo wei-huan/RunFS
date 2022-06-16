@@ -2,4 +2,5 @@
 .gdb_history
 .vscode/*
 Cargo.lock
+assets/*
 target/*
