@@ -80,6 +80,6 @@ fn check_file_system() {
     println!("cluster_size: {:#?}", bpb.cluster_size());
     println!("fsinfo_sector: {:#?}", bpb.fsinfo_sector());
     println!("backup_boot_sector: {:#?}", bpb.backup_boot_sector());
-    println!("free_cluster: {:#?}", fsinfo.next_free_cluster());
+    println!("next_free_cluster: {:#?}", fsinfo.next_free_cluster());
     println!("free_cluster_count: {:#?}", fsinfo.free_clusters());
 }

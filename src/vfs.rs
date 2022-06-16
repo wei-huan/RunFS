@@ -145,13 +145,13 @@ impl VFile {
     fn find_long_name(&self, name: &str, dir_entry: &ShortDirectoryEntry) -> Option<VFile> {
         // 名字已经做了逆序处理
         let name_vec: Vec<[u16; 13]> = long_name_split(name).into_iter().rev().collect();
-        println!("name_vec: {:#?}", name_vec);
+        // println!("name_vec: {:#?}", name_vec);
         let entry_num = name_vec.len();
         let mut long_entry = LongDirectoryEntry::default();
         let mut long_pos_vec: Vec<(usize, usize)> = Vec::new();
         let mut dir_offset: usize = 0;
         let name_last = name_vec[0];
-        println!("name_last: {:#?}", name_last);
+        // println!("name_last: {:#?}", name_last);
         loop {
             long_pos_vec.clear();
             // 读取 offset 处的目录项
@@ -161,14 +161,10 @@ impl VFile {
                 return None;
             }
             let long_entry_name = long_entry.name_to_array();
-            println!("long_entry_name: {:#?}", long_entry_name);
+            // println!("long_entry_name: {:#?}", long_entry_name);
             if long_entry_name == name_last && long_entry.is_long() {
-                let order = long_entry.order();
-                println!("order: {:#X?}", order);
                 let raw_order = long_entry.raw_order();
-                println!("raw_order: {:#X?}", raw_order);
                 let long_checksum = long_entry.checksum();
-                println!("long_checksum: {:#X?}", long_checksum);
                 if !long_entry.is_last() || raw_order != entry_num as u8 {
                     dir_offset += DIRENT_SZ;
                     continue;
@@ -198,7 +194,7 @@ impl VFile {
                         return None;
                     }
                     let short_checksum = short_entry.checksum();
-                    println!("short_checksum: {:#X?}", short_checksum);
+                    // println!("short_checksum: {:#X?}", short_checksum);
                     if long_checksum == short_checksum {
                         let (short_cluster, short_offset) = dir_entry.pos(short_offset, &self.fs);
                         for i in 0..raw_order as usize {
@@ -274,10 +270,10 @@ impl VFile {
             self.short_offset,
             |entry: &ShortDirectoryEntry| short_entry = *entry,
         );
-        // 长文件名
+        // 长文件名搜索
         let res = self.find_long_name(name, &short_entry);
         if res.is_some() {
-            println!("long");
+            // println!("long");
             return res;
         } else {
             println!("short");

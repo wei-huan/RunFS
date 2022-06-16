@@ -197,7 +197,6 @@ impl ShortDirectoryEntry {
         for i in 0..SHORT_FILE_EXT_LEN {
             name_buff[i + SHORT_FILE_NAME_LEN] = self.extension[i];
         }
-        println!("name_buff: {:#?}", name_buff);
         for i in 0..SHORT_NAME_LEN {
             if (sum & 1) != 0 {
                 temp = 0x80 + (sum >> 1) as u16 + name_buff[i] as u16;

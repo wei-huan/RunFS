@@ -72,12 +72,12 @@ fn test_find_file_long() {
     println!("file short_pos: {:#?}", vfile.short_pos());
 }
 
-// #[test]
-// fn test_delete_file() {
-//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-//     let vfile = root_dir.find_vfile_byname("open").unwrap();
-//     println!("file: {:#X?}", vfile.name());
-//     vfile.delete();
-// }
+#[test]
+fn test_delete_file() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let vfile = root_dir.find_vfile_byname("mount").unwrap();
+    println!("file: {:#X?}", vfile.name());
+    vfile.delete();
+}
