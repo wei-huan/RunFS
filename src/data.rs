@@ -94,7 +94,7 @@ impl DataManager {
             self.write_cluster_at(cluster_id, offset, f)
         }
     }
-    fn read_long_dirent<V>(
+    pub fn read_long_dirent<V>(
         &mut self,
         cluster_id: usize,
         offset: usize,
@@ -102,7 +102,7 @@ impl DataManager {
     ) -> V {
         self.read_cluster_at(cluster_id, offset, f)
     }
-    fn modify_long_dirent<V>(
+    pub fn modify_long_dirent<V>(
         &mut self,
         cluster_id: usize,
         offset: usize,

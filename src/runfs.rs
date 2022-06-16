@@ -85,17 +85,17 @@ impl RunFileSystem {
         self.fat_manager_read().fsinfo()
     }
     /// 在 FAT 表中分配项并清空对应簇中的数据, 成功返回 id, 失败返回 None
-    pub fn alloc_cluster(&mut self) -> Option<u32> {
-        if let Some(cluster_id) = self.fat_manager.write().alloc_cluster(None) {
+    pub fn alloc_cluster(&mut self, prev: Option<u32>) -> Option<u32> {
+        if let Some(cluster_id) = self.fat_manager.write().alloc_cluster(prev) {
             self.data_manager.write().clear_cluster(cluster_id as usize);
             return Some(cluster_id);
         }
         return None;
     }
     /// 在 FAT 表中分配多个项并清空对应簇中的数据, 成功返回分配的第一个 id, 失败返回 None
-    pub fn alloc_clusters(&mut self, num: usize) -> Option<u32> {
+    pub fn alloc_clusters(&mut self, num: usize, prev: Option<u32>) -> Option<u32> {
         let mut fat_manager = self.fat_manager.write();
-        if let Some(first_cluster) = fat_manager.alloc_clusters(num, None) {
+        if let Some(first_cluster) = fat_manager.alloc_clusters(num, prev) {
             let id_vec = fat_manager.all_clusters(first_cluster as usize);
             for id in id_vec {
                 self.data_manager.write().clear_cluster(id);
@@ -104,6 +104,17 @@ impl RunFileSystem {
         } else {
             return None;
         }
+    }
+    /// 如果这个簇不是簇链中最后一个簇也会删除, 悬空后自己负责, 成功返回下一个要删除的 id
+    /// 如果要删除的簇本身就是空的或者坏的或者最后一个,则返回None
+    pub fn dealloc_cluster(&mut self, cluster_id: usize, prev: Option<u32>) -> Option<u32> {
+        self.fat_manager.write().dealloc_cluster(cluster_id, prev)
+    }
+    /// 返回真正回收的簇数量
+    pub fn dealloc_clusters(&mut self, first_cluster: usize, prev: Option<u32>) -> usize {
+        self.fat_manager
+            .write()
+            .dealloc_clusters(first_cluster, prev)
     }
     pub fn root_vfile(&self, runfs: &Arc<RwLock<Self>>) -> VFile {
         let short_cluster = runfs.read().bpb().root_dir_cluster() as usize;

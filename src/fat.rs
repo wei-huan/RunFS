@@ -256,6 +256,47 @@ impl FATManager {
             return None;
         }
     }
+    /// 如果这个簇不是簇链中最后一个簇也会删除, 悬空后自己负责, 成功返回下一个要删除的 id
+    /// 如果要删除的簇本身就是空的或者坏的或者最后一个,则返回None
+    pub fn dealloc_cluster(&mut self, cluster_id: usize, prev: Option<u32>) -> Option<u32> {
+        let entry = self.entry(cluster_id);
+        match entry {
+            FATEntry::Free => None,
+            FATEntry::Bad => None,
+            FATEntry::End => {
+                self.set_entry(cluster_id, FATEntry::Free);
+                if let Some(prev) = prev {
+                    self.set_entry(prev as usize, FATEntry::End);
+                }
+                self.fsinfo.map_free_clusters(|n| n + 1);
+                None
+            }
+            FATEntry::Next(next_cluster) => {
+                self.set_entry(cluster_id as usize, FATEntry::Free);
+                if let Some(prev) = prev {
+                    self.set_entry(prev as usize, FATEntry::End);
+                }
+                self.fsinfo.map_free_clusters(|n| n + 1);
+                Some(next_cluster)
+            }
+        }
+    }
+    /// 返回真正回收的簇数量
+    pub fn dealloc_clusters(&mut self, first_cluster: usize, mut prev: Option<u32>) -> usize {
+        let mut num = 0;
+        let mut recycle_cluster = first_cluster;
+        loop {
+            let next_cluster = self.dealloc_cluster(recycle_cluster, prev);
+            if next_cluster.is_none() {
+                break;
+            } else {
+                prev = None;
+                recycle_cluster = next_cluster.unwrap() as usize;
+                num += 1;
+            }
+        }
+        num
+    }
     /// 返回簇链中第 n 个元素的 id
     pub fn search_cluster(&mut self, chain_start_cluster: usize, index: usize) -> Option<usize> {
         let mut curr_cluster = chain_start_cluster;
