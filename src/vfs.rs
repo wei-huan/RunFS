@@ -174,7 +174,7 @@ impl VFile {
         entry.read_at(offset, buf, &self.fs)
     }
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
-        // self.resize(offset + buf.len());
+        self.adjust_capacity(offset + buf.len()).unwrap();
         let mut entry = ShortDirectoryEntry::default();
         if self.is_root() {
             entry = self.fs.write().root_dirent();
@@ -381,10 +381,11 @@ impl VFile {
                 .count_clusters(self.first_data_cluster() as usize)
     }
     /// 改变文件或文件夹的容量, 成功返回 Ok, 失败返回 GG
+    /// new_capacity 不一定要是 cluster_size 的整数倍, 函数会帮忙向上取整
     pub fn adjust_capacity(&self, new_capacity: usize) -> Result<(), FSError> {
         let cluster_size = self.fs.read().bpb().cluster_size();
         let current_capacity = self.capacity();
-        let num = (new_capacity - current_capacity) / cluster_size;
+        let num = (new_capacity + cluster_size - current_capacity) / cluster_size;
         let current_last_cluster = self
             .fs
             .read()
@@ -402,7 +403,6 @@ impl VFile {
             println!("0-0-1-1");
             return None;
         }
-        let cluster_size = self.fs.read().bpb().cluster_size();
         let mut offset = 0;
         loop {
             println!("0-0-1-2");
@@ -412,7 +412,7 @@ impl VFile {
             // 扩容
             if read_size == 0 {
                 let current_capacity = self.capacity();
-                self.adjust_capacity((current_capacity + num * DIRENT_SZ + cluster_size))
+                self.adjust_capacity(current_capacity + num * DIRENT_SZ)
                     .unwrap();
             }
             // 找到第一个空簇
@@ -425,8 +425,7 @@ impl VFile {
                     let current_capacity = self.capacity();
                     // 不够了,扩容后再读
                     if read_size == 0 && offset >= current_capacity {
-                        let cluster_size = self.fs.read().bpb().cluster_size();
-                        self.adjust_capacity(current_capacity + num * DIRENT_SZ + cluster_size)
+                        self.adjust_capacity(current_capacity + num * DIRENT_SZ)
                             .unwrap();
                         self.read_at(offset, tmp_dirent.as_bytes_mut());
                     }
@@ -447,12 +446,22 @@ impl VFile {
             offset += DIRENT_SZ;
         }
     }
+    pub fn is_already_exist(&self, filename: &str, attribute: FileAttributes) -> bool {
+        if let Some(vfile) = self.find_vfile_byname(filename) {
+            return (vfile.is_dir() && attribute.contains(FileAttributes::DIRECTORY))
+                || (!vfile.is_dir() && !attribute.contains(FileAttributes::DIRECTORY));
+        }
+        false
+    }
     /// 在当前目录下创建文件或目录
     pub fn create(&self, filename: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
         println!("0-0-0-0");
         // 判断是否是文件夹
         assert!(self.is_dir());
-        // TODO: 判断是否有同名同类型文件
+        // TODO: 判断当前目录是否有同名同类型文件
+        if self.is_already_exist(filename, attribute) {
+            return None;
+        }
         // 长文件名拆分
         let mut long_name_vec = long_name_split(filename);
         let long_entry_num = long_name_vec.len();
@@ -473,9 +482,9 @@ impl VFile {
         let mut ext = [0u8; SHORT_FILE_EXT_LEN];
         ext.copy_from_slice(&short_name[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
         // 给文件或文件夹分配空间
-        let first_cluster = self.fs.write().alloc_cluster(None).unwrap();
-        println!("first_cluster: {}", first_cluster);
-        let short_entry = ShortDirectoryEntry::new(name, ext, attribute, first_cluster);
+        let first_data_cluster = self.fs.write().alloc_cluster(None).unwrap();
+        println!("first_data_cluster: {}", first_data_cluster);
+        let short_entry = ShortDirectoryEntry::new(name, ext, attribute, first_data_cluster);
         let checksum = short_entry.checksum();
         println!("0-0-0-2");
         println!("long_entry_num: {}", long_entry_num);
@@ -507,7 +516,7 @@ impl VFile {
             name.copy_from_slice(&dot[0..SHORT_FILE_NAME_LEN]);
             ext.copy_from_slice(&dot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
             let self_dir =
-                ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY, first_cluster);
+                ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY, first_data_cluster);
             let dotdot: [u8; SHORT_NAME_LEN] = generate_short_name("..");
             name.copy_from_slice(&dotdot[0..SHORT_FILE_NAME_LEN]);
             ext.copy_from_slice(&dotdot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
@@ -530,14 +539,14 @@ impl VFile {
     }
     /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹, 如果文件夹里有东西, 那就等着悬空吧
     pub fn delete(&self) -> usize {
-        println!(
-            "entry cluster_id: {}, offset: {}",
-            self.short_cluster, self.short_offset
-        );
+        // println!(
+        //     "entry cluster_id: {}, offset: {}",
+        //     self.short_cluster, self.short_offset
+        // );
         let first_cluster: u32 = self.first_data_cluster();
-        println!("file first_cluster: {}", first_cluster);
+        // println!("file first_cluster: {}", first_cluster);
         for (cluster, offset) in self.long_pos_vec.iter() {
-            println!("cluster_id: {}, offset: {}", *cluster, *offset);
+            // println!("cluster_id: {}, offset: {}", *cluster, *offset);
             self.fs.read().data_manager_modify().modify_long_dirent(
                 *cluster,
                 *offset,

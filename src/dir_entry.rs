@@ -19,6 +19,7 @@ bitflags! {
     #[derive(Default)]
     #[repr(C, packed(1))]
     pub struct FileAttributes: u8 {
+        const FILE       = 0x00;
         const READ_ONLY  = 0x01;
         const HIDDEN     = 0x02;
         const SYSTEM     = 0x04;
@@ -139,23 +140,12 @@ impl ShortDirectoryEntry {
     // 获取文件起始簇号
     pub fn first_cluster(&self) -> u32 {
         ((self.cluster_high as u32) << 16) + (self.cluster_low as u32)
-        // let n = ((self.cluster_high as u32) << 16) + (self.cluster_low as u32);
-        // if n == 0 {
-        //     None
-        // } else {
-        //     Some(n)
-        // }
     }
     // 设置文件起始簇号
     pub fn set_first_cluster(&mut self, cluster: u32) {
         self.cluster_high = ((cluster & 0xFFFF0000) >> 16) as u16;
         self.cluster_low = (cluster & 0x0000FFFF) as u16;
     }
-    // pub fn set_first_cluster(&mut self, cluster: Option<u32>) {
-    //     let n = cluster.unwrap_or(0);
-    //     self.cluster_high = (n >> 16) as u16;
-    //     self.cluster_low = (n & 0x00FF) as u16;
-    // }
     pub fn size(&self) -> Option<u32> {
         if self.is_file() {
             Some(self.size)

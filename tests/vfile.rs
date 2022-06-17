@@ -129,3 +129,51 @@ fn test_create_dir() {
         .create("wakuwaku", FileAttributes::DIRECTORY)
         .unwrap();
 }
+
+#[test]
+fn test_create_dir_in_subdir() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let vfile = root_dir.find_vfile_byname("wakuwaku").unwrap();
+    vfile
+        .create("wakuwakuwaku", FileAttributes::DIRECTORY)
+        .unwrap();
+    println!("file: {:#X?}", vfile.name());
+}
+
+#[test]
+fn test_create_file_in_subdir() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let vfile = root_dir.find_vfile_byname("wakuwaku").unwrap();
+    let helloworld = vfile
+        .create("helloworld.txt", FileAttributes::FILE)
+        .unwrap();
+    println!("file: {:#X?}", helloworld.name());
+}
+
+// #[test]
+// fn test_write_file() {
+//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+//     let vfile = root_dir.find_vfile_byname("wakuwaku").unwrap();
+//     let helloworld = vfile
+//         .create("helloworld.txt", FileAttributes::FILE)
+//         .unwrap();
+//     println!("file: {:#X?}", helloworld.name());
+// }
+
+// #[test]
+// fn test_read_file() {
+//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+//     let vfile = root_dir.find_vfile_byname("wakuwaku").unwrap();
+//     let helloworld = vfile
+//         .create("helloworld.txt", FileAttributes::FILE)
+//         .unwrap();
+//     println!("file: {:#X?}", helloworld.name());
+// }
