@@ -59,11 +59,14 @@ impl ShortDirectoryEntry {
         name: [u8; SHORT_FILE_NAME_LEN],
         extension: [u8; SHORT_FILE_EXT_LEN],
         attribute: FileAttributes,
+        first_cluster: u32,
     ) -> Self {
         Self {
             name,
             extension,
             attribute,
+            cluster_low: (first_cluster & 0x0000FFFF) as u16,
+            cluster_high: ((first_cluster & 0xFFFF0000) >> 16) as u16,
             ..Self::default()
         }
     }
@@ -234,6 +237,7 @@ impl ShortDirectoryEntry {
         let current_cluster = runfs
             .fat_manager_modify()
             .search_cluster(self.first_cluster() as usize, cluster_index);
+        println!("first_cluster: {}", self.first_cluster() as usize);
         (current_cluster, offset % bytes_per_sector)
     }
     /// 以偏移量读取文件, 返回实际读取的长度
@@ -243,6 +247,7 @@ impl ShortDirectoryEntry {
         buf: &mut [u8],
         runfs: &Arc<RwLock<RunFileSystem>>,
     ) -> usize {
+        println!("1-0-0-0");
         let cluster_size = runfs.read().bpb().cluster_size();
         let mut current_offset = offset;
         let mut size = self.size as usize;
@@ -254,11 +259,13 @@ impl ShortDirectoryEntry {
                     .fat_manager_modify()
                     .count_clusters(self.first_cluster() as usize);
         }
+        println!("1-0-0-1");
         let offset_end_pos = offset + buf.len().min(size);
         // println!(
         //     "In read_at current_offset = {}; offset_end_pos = {}",
         //     current_offset, offset_end_pos
         // );
+        println!("1-0-0-2");
         if current_offset >= offset_end_pos {
             return 0;
         }
@@ -267,9 +274,11 @@ impl ShortDirectoryEntry {
             return 0;
         };
         let mut current_cluster = cluster_id.unwrap();
+        println!("current_cluster: {}", current_cluster);
         // println!("current_cluster = {}", current_cluster);
         let mut read_size = 0usize;
         loop {
+            println!("1-0-0-3");
             // 将偏移量向上对齐簇大小
             let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
             current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
@@ -287,6 +296,7 @@ impl ShortDirectoryEntry {
                     },
                 );
             }
+            println!("1-0-0-4");
             // 更新读取长度
             read_size += cluster_read_size;
             if current_cluster_end_pos == offset_end_pos {
@@ -304,6 +314,7 @@ impl ShortDirectoryEntry {
             }
             current_cluster = next_cluster.unwrap();
         }
+        println!("1-0-0-5");
         read_size
     }
 
@@ -385,12 +396,17 @@ pub struct LongDirectoryEntry {
 
 impl LongDirectoryEntry {
     pub fn new(name: [u16; LONG_NAME_LEN], order: u8, checksum: u8) -> Self {
-        Self {
+        println!("1-0-0-0-0");
+        let mut entry = Self {
             order,
             checksum,
             attribute: FileAttributes::LONG_NAME,
             ..Self::default()
-        }
+        };
+        println!("1-0-0-0-1");
+        entry.name_from_slice(&name);
+        println!("1-0-0-0-2");
+        entry
     }
     pub fn name_from_slice(&mut self, lfn_part: &[u16; LONG_NAME_LEN]) {
         self.name1.copy_from_slice(&lfn_part[0..5]);

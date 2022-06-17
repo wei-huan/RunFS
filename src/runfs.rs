@@ -34,12 +34,12 @@ impl RunFileSystem {
             fsinfo_sector.next_free_cluster_raw(),
         );
         fsinfo.validate_and_fix(bpb.total_clusters());
-        let mut root_dirent = ShortDirectoryEntry::new(
-            [0x2F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20], // .
+        let root_dirent = ShortDirectoryEntry::new(
+            [0x2F, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20], // 根目录文件名为 /
             [0x20, 0x20, 0x20],
             FileAttributes::DIRECTORY,
+            bpb.root_dir_cluster(),
         );
-        root_dirent.set_first_cluster(bpb.root_dir_cluster());
         Self {
             bpb: bpb.clone(),
             fat_manager: Arc::new(RwLock::new(FATManager::new(
@@ -118,17 +118,18 @@ impl RunFileSystem {
     }
     pub fn root_vfile(&self, runfs: &Arc<RwLock<Self>>) -> VFile {
         let short_cluster = runfs.read().bpb().root_dir_cluster() as usize;
+        println!("root short_cluster: {}", short_cluster);
         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
         VFile::new(
             String::from("/"),
             short_cluster,
-            0,
+            0, // 0 或 32, 可能有 Volumn_Label
             long_pos_vec,
             FileAttributes::DIRECTORY,
             Arc::clone(runfs),
         )
     }
-    // pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
-    //     self.root_dirent.clone()
-    // }
+    pub fn root_dirent(&self) -> ShortDirectoryEntry {
+        self.data_manager_read().root_dirent().read().clone()
+    }
 }

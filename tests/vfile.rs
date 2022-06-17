@@ -1,4 +1,4 @@
-use runfs::{BlockDevice, IOError, RunFileSystem, VFile};
+use runfs::{BlockDevice, FileAttributes, IOError, RunFileSystem, VFile};
 use spin::RwLock;
 use std::fs;
 use std::fs::File;
@@ -77,7 +77,37 @@ fn test_delete_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("mount").unwrap();
+    let vfile = root_dir.find_vfile_byname("brk").unwrap();
     println!("file: {:#X?}", vfile.name());
     vfile.delete();
 }
+
+// #[test]
+// fn test_delete_dir() {
+//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+//     let vfile = root_dir.find_vfile_byname("initproc").unwrap();
+//     println!("file: {:#X?}", vfile.name());
+//     vfile.delete();
+// }
+
+#[test]
+fn test_create_file() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    root_dir
+        .create("waku.txt", FileAttributes::ARCHIVE)
+        .unwrap();
+}
+
+// #[test]
+// fn test_create_dir() {
+//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+//     root_dir
+//         .create("waku", FileAttributes::DIRECTORY)
+//         .unwrap();
+// }

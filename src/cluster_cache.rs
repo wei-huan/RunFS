@@ -78,7 +78,7 @@ impl ClusterCache {
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
+        let cluster_size = self.bpb.cluster_size() as usize;
         assert!(offset + type_size <= cluster_size);
         self.set_modify();
         unsafe {

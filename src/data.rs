@@ -22,6 +22,9 @@ impl DataManager {
             cluster_cache: ClusterCacheManager::new(bpb, block_device),
         }
     }
+    pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
+        self.root_dirent.clone()
+    }
     /// buf 长度必须比簇 cache 大
     pub fn read_cluster(&mut self, cluster_id: usize, buf: &mut [u8]) {
         let cache = self.cluster_cache.get_cache(cluster_id);
@@ -87,12 +90,12 @@ impl DataManager {
         offset: usize,
         f: impl FnOnce(&mut ShortDirectoryEntry) -> V,
     ) -> V {
-        if cluster_id == self.bpb.root_dir_cluster() as usize {
-            let mut rw = self.root_dirent.write();
-            f(&mut rw)
-        } else {
-            self.write_cluster_at(cluster_id, offset, f)
-        }
+        // if cluster_id == self.bpb.root_dir_cluster() as usize {
+        //     let mut rw = self.root_dirent.write();
+        //     f(&mut rw)
+        // } else {
+        self.write_cluster_at(cluster_id, offset, f)
+        // }
     }
     pub fn read_long_dirent<V>(
         &mut self,
