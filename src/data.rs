@@ -5,7 +5,6 @@ use spin::RwLock;
 use std::sync::Arc;
 
 pub struct DataManager {
-    bpb: Arc<BiosParameterBlock>,
     root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
     cluster_cache: ClusterCacheManager,
 }
@@ -17,7 +16,6 @@ impl DataManager {
         block_device: Arc<dyn BlockDevice>,
     ) -> DataManager {
         Self {
-            bpb: Arc::clone(&bpb),
             root_dirent,
             cluster_cache: ClusterCacheManager::new(bpb, block_device),
         }

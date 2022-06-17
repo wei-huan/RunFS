@@ -6,7 +6,7 @@ use super::{
 use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
 
-// 包括 BPB 和 FSInfo 的信息
+/// 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
     bpb: Arc<BiosParameterBlock>,
     fat_manager: Arc<RwLock<FATManager>>,
@@ -118,7 +118,6 @@ impl RunFileSystem {
     }
     pub fn root_vfile(&self, runfs: &Arc<RwLock<Self>>) -> VFile {
         let short_cluster = runfs.read().bpb().root_dir_cluster() as usize;
-        println!("root short_cluster: {}", short_cluster);
         let long_pos_vec: Vec<(usize, usize)> = Vec::new();
         VFile::new(
             String::from("/"),

@@ -73,11 +73,29 @@ fn test_find_file_long() {
 }
 
 #[test]
+fn test_directory_size() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let size = root_dir.size();
+    println!("size: {:#?}", size);
+}
+
+#[test]
+fn test_find_dirents() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let offset = root_dir.find_free_dirents(6);
+    println!("file offset: {:#?}", offset);
+}
+
+#[test]
 fn test_delete_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("wakuwakuwakuwaku.txt").unwrap();
+    let vfile = root_dir.find_vfile_byname("brk").unwrap();
     println!("file: {:#X?}", vfile.name());
     vfile.delete();
 }
@@ -102,12 +120,12 @@ fn test_create_file() {
         .unwrap();
 }
 
-// #[test]
-// fn test_create_dir() {
-//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-//     root_dir
-//         .create("waku", FileAttributes::DIRECTORY)
-//         .unwrap();
-// }
+#[test]
+fn test_create_dir() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    root_dir
+        .create("wakuwaku", FileAttributes::DIRECTORY)
+        .unwrap();
+}

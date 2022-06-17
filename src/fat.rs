@@ -150,6 +150,16 @@ impl FATManager {
             }
         }
     }
+    pub fn last_cluster(&mut self, start_cluster: usize) -> usize {
+        let mut curr_cluster = start_cluster;
+        loop {
+            if let Some(next_cluster) = self.next_cluster(curr_cluster) {
+                curr_cluster = next_cluster;
+            } else {
+                return curr_cluster;
+            }
+        }
+    }
     pub fn all_clusters(&mut self, start_cluster: usize) -> Vec<usize> {
         let mut curr_cluster = start_cluster;
         let mut clusters: Vec<usize> = Vec::new();
