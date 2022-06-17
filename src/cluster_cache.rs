@@ -79,7 +79,12 @@ impl ClusterCache {
     {
         let type_size = core::mem::size_of::<T>();
         let cluster_size = self.bpb.cluster_size() as usize;
-        assert!(offset + type_size <= cluster_size);
+        assert!(
+            offset + type_size <= cluster_size,
+            "offset: {}, type_size: {}",
+            offset,
+            type_size
+        );
         self.set_modify();
         unsafe {
             &mut *((&mut (self.cache[offset..offset + type_size])).as_mut_ptr() as *mut _ as usize

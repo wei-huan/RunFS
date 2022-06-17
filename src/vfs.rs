@@ -133,11 +133,15 @@ impl VFile {
         !self.is_dir()
     }
     pub fn first_data_cluster(&self) -> u32 {
-        self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |short_entry: &ShortDirectoryEntry| short_entry.first_cluster(),
-        )
+        if self.is_root() {
+            self.fs.read().bpb().root_dir_cluster()
+        } else {
+            self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |short_entry: &ShortDirectoryEntry| short_entry.first_cluster(),
+            )
+        }
     }
     pub fn last_data_cluster(&self) -> u32 {
         self.fs.read().data_manager_modify().read_short_dirent(
@@ -408,7 +412,7 @@ impl VFile {
             // 扩容
             if read_size == 0 {
                 let current_capacity = self.capacity();
-                self.adjust_capacity(current_capacity + num / cluster_size)
+                self.adjust_capacity((current_capacity + num * DIRENT_SZ + cluster_size))
                     .unwrap();
             }
             // 找到第一个空簇
@@ -418,12 +422,13 @@ impl VFile {
                 while available < num {
                     offset += DIRENT_SZ;
                     read_size = self.read_at(offset, tmp_dirent.as_bytes_mut());
-                    // 扩容
-                    if read_size == 0 {
-                        let current_capacity = self.capacity();
+                    let current_capacity = self.capacity();
+                    // 不够了,扩容后再读
+                    if read_size == 0 && offset >= current_capacity {
                         let cluster_size = self.fs.read().bpb().cluster_size();
-                        self.adjust_capacity(current_capacity + num / cluster_size)
+                        self.adjust_capacity(current_capacity + num * DIRENT_SZ + cluster_size)
                             .unwrap();
+                        self.read_at(offset, tmp_dirent.as_bytes_mut());
                     }
                     if tmp_dirent.is_free() {
                         available += 1;
@@ -460,6 +465,7 @@ impl VFile {
             println!("0-0-0-1");
             return None;
         }
+        println!("need_dirent: {}", long_entry_num + 1);
         // 生成短文件名及对应目录项
         let short_name: [u8; SHORT_NAME_LEN] = generate_short_name(filename);
         let mut name = [0u8; SHORT_FILE_NAME_LEN];

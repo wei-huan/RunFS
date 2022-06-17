@@ -70,7 +70,8 @@ impl FATManager {
     pub fn entry(&mut self, cluster_id: usize) -> FATEntry {
         assert!(
             cluster_id <= self.bpb.total_clusters() as usize + START_CLUS_ID,
-            "Invalid Cluster ID in FAT"
+            "Invalid Cluster ID in FAT {}",
+            cluster_id
         );
         let entry_raw = self.entry_raw(cluster_id) & 0x0FFF_FFFF;
         match entry_raw {

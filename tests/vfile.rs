@@ -86,7 +86,7 @@ fn test_find_dirents() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let offset = root_dir.find_free_dirents(6);
+    let offset = root_dir.find_free_dirents(3);
     println!("file offset: {:#?}", offset);
 }
 
