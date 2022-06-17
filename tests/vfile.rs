@@ -77,7 +77,7 @@ fn test_delete_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("brk").unwrap();
+    let vfile = root_dir.find_vfile_byname("wakuwakuwakuwaku.txt").unwrap();
     println!("file: {:#X?}", vfile.name());
     vfile.delete();
 }
@@ -98,7 +98,7 @@ fn test_create_file() {
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
     root_dir
-        .create("waku.txt", FileAttributes::ARCHIVE)
+        .create("wakuwakuwakuwaku.txt", FileAttributes::ARCHIVE)
         .unwrap();
 }
 

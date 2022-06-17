@@ -132,7 +132,7 @@ impl VFile {
     pub fn is_file(&self) -> bool {
         !self.is_dir()
     }
-    pub fn first_cluster(&self) -> u32 {
+    pub fn data_first_cluster(&self) -> u32 {
         self.fs.read().data_manager_modify().read_short_dirent(
             self.short_cluster,
             self.short_offset,
@@ -151,21 +151,29 @@ impl VFile {
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
         println!("0-1-0-0");
         let mut entry = ShortDirectoryEntry::default();
-        self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |short_entry: &ShortDirectoryEntry| entry = *short_entry,
-        );
+        if self.is_root() {
+            entry = self.fs.write().root_dirent();
+        } else {
+            self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |short_entry: &ShortDirectoryEntry| entry = *short_entry,
+            );
+        }
         entry.read_at(offset, buf, &self.fs)
     }
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // self.increase_size((offset + buf.len()) as u32);
         let mut entry = ShortDirectoryEntry::default();
-        self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |short_entry: &ShortDirectoryEntry| entry = *short_entry,
-        );
+        if self.is_root() {
+            entry = self.fs.write().root_dirent();
+        } else {
+            self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |short_entry: &ShortDirectoryEntry| entry = *short_entry,
+            );
+        }
         entry.write_at(offset, buf, &self.fs)
     }
     /// 长文件名方式搜索, 只支持本级搜索, 不支持递归搜索
@@ -291,11 +299,15 @@ impl VFile {
         assert!(self.is_dir());
         // 复制文件夹自己的短文件名目录项
         let mut short_entry = ShortDirectoryEntry::default();
-        self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |entry: &ShortDirectoryEntry| short_entry = *entry,
-        );
+        if self.is_root() {
+            short_entry = self.fs.write().root_dirent();
+        } else {
+            self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |entry: &ShortDirectoryEntry| short_entry = *entry,
+            );
+        }
         println!("short_entry");
         // 长文件名搜索
         let res = self.find_long_name(name, &short_entry);
@@ -339,9 +351,9 @@ impl VFile {
         loop {
             println!("0-0-1-2");
             let mut tmp_dirent = ShortDirectoryEntry::default();
-            let read_sz = self.read_at(offset, tmp_dirent.as_bytes_mut());
+            let read_size = self.read_at(offset, tmp_dirent.as_bytes_mut());
             println!("0-0-1-3");
-            if tmp_dirent.is_free() || read_sz == 0 {
+            if tmp_dirent.is_free() || read_size == 0 {
                 println!("0-0-1-4");
                 println!("offset: {:#?} {:#X?}", offset, offset);
                 return Some(offset);
@@ -437,7 +449,12 @@ impl VFile {
     }
     /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹
     pub fn delete(&self) -> usize {
-        let first_cluster: u32 = self.first_cluster();
+        println!(
+            "entry cluster_id: {}, offset: {}",
+            self.short_cluster, self.short_offset
+        );
+        let first_cluster: u32 = self.data_first_cluster();
+        println!("file first_cluster: {}", first_cluster);
         for (cluster, offset) in self.long_pos_vec.iter() {
             println!("cluster_id: {}, offset: {}", *cluster, *offset);
             self.fs.read().data_manager_modify().modify_long_dirent(

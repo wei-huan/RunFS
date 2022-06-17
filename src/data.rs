@@ -77,12 +77,7 @@ impl DataManager {
         offset: usize,
         f: impl FnOnce(&ShortDirectoryEntry) -> V,
     ) -> V {
-        if cluster_id == self.bpb.root_dir_cluster() as usize {
-            let rr = self.root_dirent.read();
-            f(&rr)
-        } else {
-            self.read_cluster_at(cluster_id, offset, f)
-        }
+        self.read_cluster_at(cluster_id, offset, f)
     }
     pub fn modify_short_dirent<V>(
         &mut self,
@@ -90,12 +85,7 @@ impl DataManager {
         offset: usize,
         f: impl FnOnce(&mut ShortDirectoryEntry) -> V,
     ) -> V {
-        // if cluster_id == self.bpb.root_dir_cluster() as usize {
-        //     let mut rw = self.root_dirent.write();
-        //     f(&mut rw)
-        // } else {
         self.write_cluster_at(cluster_id, offset, f)
-        // }
     }
     pub fn read_long_dirent<V>(
         &mut self,
