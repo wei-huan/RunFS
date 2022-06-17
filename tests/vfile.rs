@@ -82,15 +82,15 @@ fn test_delete_file() {
     vfile.delete();
 }
 
-// #[test]
-// fn test_delete_dir() {
-//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-//     let vfile = root_dir.find_vfile_byname("initproc").unwrap();
-//     println!("file: {:#X?}", vfile.name());
-//     vfile.delete();
-// }
+#[test]
+fn test_delete_dir() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let vfile = root_dir.find_vfile_byname("mnt").unwrap();
+    println!("file: {:#X?}", vfile.name());
+    vfile.delete();
+}
 
 #[test]
 fn test_create_file() {

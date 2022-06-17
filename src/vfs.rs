@@ -447,7 +447,7 @@ impl VFile {
         println!("0-0-0-5");
         return Some(Arc::new(vfile));
     }
-    /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹
+    /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹, 如果文件夹里有东西, 那就等着悬空吧
     pub fn delete(&self) -> usize {
         println!(
             "entry cluster_id: {}, offset: {}",
