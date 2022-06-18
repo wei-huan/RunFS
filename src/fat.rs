@@ -2,7 +2,9 @@
 use super::{
     BiosParameterBlock, BlockDevice, FSInfo, FSInfoSector, SectorCacheManager, START_CLUS_ID,
 };
-use std::sync::Arc;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 const BYTES_PER_ENTRY: usize = 4;
 const BAD_CLUSTER: u32 = 0x0FFF_FFF7;
@@ -195,7 +197,7 @@ impl FATManager {
         );
         let next = self.fsinfo.next_free_cluster();
         if next.is_some() && next.unwrap() > (start_cluster as u32) {
-            println!("free cluster {:?}, from fsinfo", next);
+            // println!("free cluster {:?}, from fsinfo", next);
             return next;
         } else {
             // 从当前搜到末尾

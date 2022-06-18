@@ -2,8 +2,12 @@
 use super::{BiosParameterBlock, BlockDevice};
 use crate::config::{INFOSEC_CACHE_SZ, MAX_SEC_SZ};
 use spin::RwLock;
-use std::collections::VecDeque;
-use std::sync::Arc;
+
+use alloc::collections::VecDeque;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 // 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {

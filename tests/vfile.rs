@@ -50,7 +50,8 @@ impl BlockDevice for FileEmulateBlockDevice {
     }
 }
 
-const IMG: &str = "assets/fat32_1.img";
+// const IMG: &str = "assets/fat32_1.img";
+const IMG: &str = "/dev/sda";
 
 #[test]
 fn test_find_file_short() {
@@ -95,7 +96,7 @@ fn test_delete_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let vfile = root_dir.find_vfile_byname("brk").unwrap();
+    let vfile = root_dir.find_vfile_byname("getcwd").unwrap();
     println!("file: {:#X?}", vfile.name());
     vfile.delete();
 }
@@ -115,11 +116,12 @@ fn test_create_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let file = root_dir
+    // let file =
+    root_dir
         .create("helloworld.txt", FileAttributes::FILE)
         .unwrap();
-    let first = file.first_data_cluster();
-    println!("first: {:#X?}", first);
+    // let first = file.first_data_cluster();
+    // println!("first: {:#X?}", first);
 }
 
 #[test]
@@ -161,12 +163,13 @@ fn test_read_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let text = root_dir.find_vfile_byname("text.txt").unwrap();
-    let mut buf = [0u8; 52];
+    let text = root_dir.find_vfile_byname("open").unwrap();
+    let mut buf = [0u8; 62400];
     let len = text.read_at(0, &mut buf);
+    println!("buf: {:?}", buf);
     println!("text len: {:#}", len);
-    let s = String::from_utf8_lossy(&buf);
-    println!("{:#}", s);
+    // let s = String::from_utf8_lossy(&buf);
+    // println!("{:#}", s);
 }
 
 #[test]
@@ -174,8 +177,8 @@ fn test_write_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let mut buf = [0x0u8; 52];
-    let text = root_dir.find_vfile_byname("text.txt").unwrap();
+    let mut buf = [0x0u8; 130000];
+    let text = root_dir.find_vfile_byname("user_shell").unwrap();
     let len = text.read_at(0, &mut buf);
     println!("text read len: {:#}", len);
     let helloworld = root_dir.find_vfile_byname("helloworld.txt").unwrap();

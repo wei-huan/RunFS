@@ -2,8 +2,14 @@
 use super::{BiosParameterBlock, BlockDevice, START_CLUS_ID};
 use crate::config::{DATACLU_CACHE_SZ, MAX_CLUS_SZ};
 use spin::RwLock;
-use std::collections::VecDeque;
-use std::sync::Arc;
+// use std::collections::VecDeque;
+// use std::sync::Arc;
+
+use alloc::collections::VecDeque;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 pub struct ClusterCache {
     cache: Vec<u8>,

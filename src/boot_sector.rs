@@ -4,8 +4,11 @@ use crate::config::MAX_CLUS_SZ;
 use crate::dir_entry::DIRENT_SZ;
 use crate::error::FSError;
 use crate::START_CLUS_ID;
-use std::slice;
-use std::sync::Arc;
+
+use alloc::slice;
+use alloc::str;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
 
 // BPB 79 Byte
 #[repr(C, packed(1))]
@@ -45,9 +48,9 @@ impl BiosParameterBlock {
             || self.total_sectors_16 != 0
             || self.sectors_per_fat_16 != 0
             || self.fs_version != 0
-            || std::str::from_utf8(&self.fs_type_label).unwrap() != "FAT32   "
+            || str::from_utf8(&self.fs_type_label).unwrap() != "FAT32   "
         {
-            println!("Unsupported filesystem: Not FAT32");
+            // println!("Unsupported filesystem: Not FAT32");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -55,11 +58,11 @@ impl BiosParameterBlock {
     // 本项目实现的 FAT32 文件系统扇区的字节数只支持范围在 512-4096 字节中二的整指数倍
     fn validate_bytes_per_sector(&self) -> Result<(), FSError> {
         if self.bytes_per_sector.count_ones() != 1 {
-            println!("invalid bytes_per_sector value in BPB: expected a power of two");
+            // println!("invalid bytes_per_sector value in BPB: expected a power of two");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.bytes_per_sector < 512 || self.bytes_per_sector > 4096 {
-            println!("invalid bytes_per_sector value in BPB: expected value in range [512, 4096]");
+            // println!("invalid bytes_per_sector value in BPB: expected value in range [512, 4096]");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -67,17 +70,17 @@ impl BiosParameterBlock {
     // 本项目实现的 FAT32 文件系统簇的扇区数只支持二的整指数倍
     fn validate_sectors_per_cluster(&self) -> Result<(), FSError> {
         if self.sectors_per_cluster.count_ones() != 1 {
-            println!(
-                "invalid sectors_per_cluster value in BPB: expected a power of two but got {}",
-                self.sectors_per_cluster
-            );
+            // println!(
+            //     "invalid sectors_per_cluster value in BPB: expected a power of two but got {}",
+            //     self.sectors_per_cluster
+            // );
             return Err(FSError::CorruptedFileSystem);
         }
         if self.sectors_per_cluster < 1 || self.sectors_per_cluster > 128 {
-            println!(
-                "invalid sectors_per_cluster value in BPB: expected value in range [1, 128] but got {}",
-                self.sectors_per_cluster
-            );
+            // println!(
+            //     "invalid sectors_per_cluster value in BPB: expected value in range [1, 128] but got {}",
+            //     self.sectors_per_cluster
+            // );
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -87,25 +90,25 @@ impl BiosParameterBlock {
         let bytes_per_cluster: usize =
             usize::from(self.sectors_per_cluster) * usize::from(self.bytes_per_sector);
         if bytes_per_cluster > MAX_CLUS_SZ {
-            println!(
-                "invalid bytes_per_cluster value in BPB: expected value smaller than {} but got {}",
-                MAX_CLUS_SZ, bytes_per_cluster
-            );
+            // println!(
+            //     "invalid bytes_per_cluster value in BPB: expected value smaller than {} but got {}",
+            //     MAX_CLUS_SZ, bytes_per_cluster
+            // );
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
     }
     fn validate_reserved_sectors(&self) -> Result<(), FSError> {
         if self.reserved_sectors < 1 {
-            println!("invalid reserved_sectors value in BPB");
+            // println!("invalid reserved_sectors value in BPB");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.backup_boot_sector >= self.reserved_sectors {
-            println!("Invalid BPB: expected backup boot-sector to be in the reserved region");
+            // println!("Invalid BPB: expected backup boot-sector to be in the reserved region");
             return Err(FSError::CorruptedFileSystem);
         }
         if self.fsinfo_sector >= self.reserved_sectors {
-            println!("Invalid BPB: expected FSInfo sector to be in the reserved region");
+            // println!("Invalid BPB: expected FSInfo sector to be in the reserved region");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -113,7 +116,7 @@ impl BiosParameterBlock {
     // RunFS 实现的 FAT32 文件系统 FAT 表数必须为1或2
     fn validate_fats(&self) -> Result<(), FSError> {
         if self.fats_number == 0 || self.fats_number > 2 {
-            println!("invalid fats value in BPB: {}", self.fats_number);
+            // println!("invalid fats value in BPB: {}", self.fats_number);
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -121,7 +124,7 @@ impl BiosParameterBlock {
     // RunFS 实现的 FAT32 文件系统 FAT 表数必须为1或2
     fn validate_root_entries(&self) -> Result<(), FSError> {
         if self.fats_number == 0 || self.fats_number > 2 {
-            println!("invalid fats value in BPB: {}", self.fats_number);
+            // println!("invalid fats value in BPB: {}", self.fats_number);
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -130,18 +133,18 @@ impl BiosParameterBlock {
         let total_sectors = self.total_sectors_32();
         let first_data_sector = self.first_data_sector();
         if self.total_sectors_32 == 0 {
-            println!("Invalid BPB (total_sectors_32 should be non-zero)");
+            // println!("Invalid BPB (total_sectors_32 should be non-zero)");
             return Err(FSError::CorruptedFileSystem);
         }
         if total_sectors <= first_data_sector {
-            println!("Invalid total_sectors value in BPB");
+            // println!("Invalid total_sectors value in BPB");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
     }
     fn validate_fats_sectors(&self) -> Result<(), FSError> {
         if self.fats_sectors == 0 {
-            println!("Invalid sectors_per_fat_32 value in FAT32 BPB: expected non-zero value");
+            // println!("Invalid sectors_per_fat_32 value in FAT32 BPB: expected non-zero value");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
@@ -149,17 +152,17 @@ impl BiosParameterBlock {
     fn validate_total_clusters(&self) -> Result<(), FSError> {
         let total_clusters = self.total_clusters();
         if total_clusters > Self::FAT32_MAX_CLUSTERS {
-            println!("Invalid BPB: too many clusters {}", total_clusters);
+            // println!("Invalid BPB: too many clusters {}", total_clusters);
             return Err(FSError::CorruptedFileSystem);
         }
         let total_fat_entries =
             self.fats_sectors() * u32::from(self.bytes_per_sector) * 8 / (DIRENT_SZ as u32);
         let usable_fat_entries: u32 = total_fat_entries - u32::try_from(START_CLUS_ID).unwrap();
         if usable_fat_entries < total_clusters {
-            println!(
-                "FAT is too small (allows allocation of {} clusters) compared to the total number of clusters ({})",
-                usable_fat_entries, total_clusters
-            );
+            // println!(
+            //     "FAT is too small (allows allocation of {} clusters) compared to the total number of clusters ({})",
+            //     usable_fat_entries, total_clusters
+            // );
         }
         Ok(())
     }
@@ -277,7 +280,7 @@ impl BootSector {
     }
     // 直接通过块设备读取获得启动扇区, 只用于 RunFileSystem 创建
     pub fn directly_new(block_device: Arc<dyn BlockDevice>) -> Self {
-        // println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
+        // // println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
         let boot_sector = BootSector::default();
         // 调试没问题,能够获取 512 Byte 准确数据
         let sector_slice = unsafe {
@@ -291,17 +294,17 @@ impl BootSector {
     }
     pub(crate) fn validate(&self) -> Result<(), FSError> {
         if self.boot_sig != [0x55, 0xAA] {
-            println!(
-                "Invalid boot sector signature: expected [0x55, 0xAA] but got {:?}",
-                self.boot_sig
-            );
+            // println!(
+            //     "Invalid boot sector signature: expected [0x55, 0xAA] but got {:?}",
+            //     self.boot_sig
+            // );
             return Err(FSError::CorruptedFileSystem);
         }
         if self.bootjmp[0] != 0xEB && self.bootjmp[0] != 0xE9 {
-            println!(
-                "Unknown opcode {:x} in bootjmp boot sector field",
-                self.bootjmp[0]
-            );
+            // println!(
+            //     "Unknown opcode {:x} in bootjmp boot sector field",
+            //     self.bootjmp[0]
+            // );
         }
         self.bpb.validate()?;
         Ok(())

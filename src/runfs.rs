@@ -4,7 +4,11 @@ use super::{
     FileAttributes, ShortDirectoryEntry, VFile,
 };
 use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::sync::Arc;
+
+use alloc::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
