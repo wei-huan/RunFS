@@ -94,6 +94,9 @@ impl RunFileSystem {
     }
     /// 在 FAT 表中分配多个项并清空对应簇中的数据, 成功返回分配的第一个 id, 失败返回 None
     pub fn alloc_clusters(&mut self, num: usize, prev: Option<u32>) -> Option<u32> {
+        if num == 0 {
+            return None;
+        }
         let mut fat_manager = self.fat_manager.write();
         if let Some(first_cluster) = fat_manager.alloc_clusters(num, prev) {
             let id_vec = fat_manager.all_clusters(first_cluster as usize);

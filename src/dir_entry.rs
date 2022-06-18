@@ -36,7 +36,9 @@ bitflags! {
 
 pub const LAST_LONG_ENTRY: u8 = 0x40;
 
-// 短目录项,也适用于当前目录项和上级目录项
+/// 短目录项,也适用于当前目录项和上级目录项
+/// 短目录项实际就是文件和文件夹的句柄
+
 #[repr(C, packed(1))]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ShortDirectoryEntry {
@@ -221,14 +223,13 @@ impl ShortDirectoryEntry {
     /// 获取文件偏移量所在的簇和偏移
     pub fn pos(&self, offset: usize, fs: &Arc<RwLock<RunFileSystem>>) -> (Option<usize>, usize) {
         let runfs = fs.read();
-        let bytes_per_sector = runfs.bpb().bytes_per_sector() as usize;
         let bytes_per_cluster = runfs.bpb().cluster_size() as usize;
         let cluster_index = offset / bytes_per_cluster;
         let current_cluster = runfs
             .fat_manager_modify()
             .search_cluster(self.first_cluster() as usize, cluster_index);
         // println!("first_cluster: {}", self.first_cluster() as usize);
-        (current_cluster, offset % bytes_per_sector)
+        (current_cluster, offset % bytes_per_cluster)
     }
     /// 以偏移量读取文件, 返回实际读取的长度
     pub fn read_at(
@@ -237,38 +238,38 @@ impl ShortDirectoryEntry {
         buf: &mut [u8],
         runfs: &Arc<RwLock<RunFileSystem>>,
     ) -> usize {
-        println!("1-0-0-0");
+        // println!("1-0-0-0");
         let cluster_size = runfs.read().bpb().cluster_size();
         let mut current_offset = offset;
         let mut size = self.size as usize;
+        // 计算文件夹占用的空间
         if self.is_dir() {
-            // 计算文件夹占用的空间
             size = cluster_size
                 * runfs
                     .read()
                     .fat_manager_modify()
                     .count_clusters(self.first_cluster() as usize);
         }
-        println!("1-0-0-1");
-        let offset_end_pos = offset + buf.len().min(size);
+        // println!("read_at size = {}", size);
+        // println!("1-0-0-1");
+        let offset_end_pos = (offset + buf.len()).min(size);
         // println!(
-        //     "In read_at current_offset = {}; offset_end_pos = {}",
+        //     "read_at current_offset = {}; offset_end_pos = {}",
         //     current_offset, offset_end_pos
         // );
-        println!("1-0-0-2");
+        // println!("1-0-0-2");
         if current_offset >= offset_end_pos {
             return 0;
         }
         let (cluster_id, _) = self.pos(offset, runfs);
-        if cluster_id.is_none() {
-            return 0;
+        let mut current_cluster = match cluster_id {
+            None => return 0,
+            Some(id) => id,
         };
-        let mut current_cluster = cluster_id.unwrap();
-        println!("current_cluster: {}", current_cluster);
-        // println!("current_cluster = {}", current_cluster);
+        // println!("current_cluster: {}", current_cluster);
         let mut read_size = 0usize;
         loop {
-            println!("1-0-0-3");
+            // println!("1-0-0-3");
             // 将偏移量向上对齐簇大小
             let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
             current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
@@ -286,7 +287,7 @@ impl ShortDirectoryEntry {
                     },
                 );
             }
-            println!("1-0-0-4");
+            // println!("1-0-0-4");
             // 更新读取长度
             read_size += cluster_read_size;
             if current_cluster_end_pos == offset_end_pos {
@@ -298,13 +299,12 @@ impl ShortDirectoryEntry {
                 .read()
                 .fat_manager_modify()
                 .next_cluster(current_cluster);
-            // 没有下一个簇
-            if next_cluster.is_none() {
-                break;
-            }
-            current_cluster = next_cluster.unwrap();
+            current_cluster = match next_cluster {
+                None => break, // 没有下一个簇
+                Some(id) => id,
+            };
         }
-        println!("1-0-0-5");
+        // println!("1-0-0-5");
         read_size
     }
 
@@ -312,32 +312,33 @@ impl ShortDirectoryEntry {
     pub fn write_at(&self, offset: usize, buf: &[u8], runfs: &Arc<RwLock<RunFileSystem>>) -> usize {
         let cluster_size = runfs.read().bpb().cluster_size() as usize;
         let mut current_offset = offset;
-        let end_pos: usize;
-        if self.is_dir() {
-            let size = cluster_size
-                * runfs
-                    .read()
-                    .fat_manager_modify()
-                    .count_clusters(self.first_cluster() as usize) as usize;
-            end_pos = offset + buf.len().min(size); // DEBUG:约束上界
-        } else {
-            end_pos = (offset + buf.len()).min(self.size as usize);
-        }
-        if current_offset >= end_pos {
+        let capacity = cluster_size
+            * runfs
+                .read()
+                .fat_manager_modify()
+                .count_clusters(self.first_cluster() as usize) as usize;
+        // println!("write_at size = {}", capacity);
+        let offset_end_pos = (offset + buf.len()).min(capacity);
+        if current_offset >= offset_end_pos {
             return 0;
         }
+        // println!(
+        //     "write_at current_offset = {}; offset_end_pos = {}",
+        //     current_offset, offset_end_pos
+        // );
         let (cluster_id, _) = self.pos(offset, runfs);
-        if cluster_id.is_none() {
-            return 0;
+        let mut current_cluster = match cluster_id {
+            None => return 0,
+            Some(id) => id,
         };
-        let mut current_cluster = cluster_id.unwrap();
+        // println!("current_cluster = {}", current_cluster);
         let mut write_size = 0usize;
         loop {
-            // 将偏移量向上对齐扇区大小一般是512
-            let mut end_current_cluster = (current_offset / cluster_size + 1) * cluster_size;
-            end_current_cluster = end_current_cluster.min(end_pos);
-            // 写
-            let cluster_write_size = end_current_cluster - current_offset;
+            // 将偏移量向上对齐簇大小
+            let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
+            current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
+            // 开始写
+            let cluster_write_size = current_cluster_end_pos - current_offset;
             let offset_in_cluster = current_offset % cluster_size;
             let src = &buf[write_size..write_size + cluster_write_size];
             for i in 0..cluster_write_size {
@@ -351,20 +352,19 @@ impl ShortDirectoryEntry {
             }
             // 更新写入长度
             write_size += cluster_write_size;
-            if end_current_cluster == end_pos {
+            if current_cluster_end_pos == offset_end_pos {
                 break;
             }
             // 更新索引参数
-            current_offset = end_current_cluster;
+            current_offset = current_cluster_end_pos;
             let next_cluster = runfs
                 .read()
                 .fat_manager_modify()
                 .next_cluster(current_cluster);
-            // 没有下一个簇
-            if next_cluster.is_none() {
-                break;
-            }
-            current_cluster = next_cluster.unwrap();
+            current_cluster = match next_cluster {
+                None => break, // 没有下一个簇
+                Some(id) => id,
+            };
         }
         write_size
     }
@@ -387,16 +387,16 @@ pub struct LongDirectoryEntry {
 
 impl LongDirectoryEntry {
     pub fn new(name: [u16; LONG_NAME_LEN], order: u8, checksum: u8) -> Self {
-        println!("1-0-0-0-0");
+        // println!("1-0-0-0-0");
         let mut entry = Self {
             order,
             checksum,
             attribute: FileAttributes::LONG_NAME,
             ..Self::default()
         };
-        println!("1-0-0-0-1");
+        // println!("1-0-0-0-1");
         entry.name_from_slice(&name);
-        println!("1-0-0-0-2");
+        // println!("1-0-0-0-2");
         entry
     }
     pub fn name_from_slice(&mut self, lfn_part: &[u16; LONG_NAME_LEN]) {

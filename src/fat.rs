@@ -195,6 +195,7 @@ impl FATManager {
         );
         let next = self.fsinfo.next_free_cluster();
         if next.is_some() && next.unwrap() > (start_cluster as u32) {
+            println!("free cluster {:?}, from fsinfo", next);
             return next;
         } else {
             // 从当前搜到末尾
