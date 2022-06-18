@@ -33,4 +33,5 @@ pub use error::{FSError, IOError};
 pub use fat::FATEntry;
 pub use runfs::RunFileSystem;
 pub use vfs::{long_name_split, VFile};
-pub const START_CLUS_ID: usize = 2;
+
+const START_CLUS_ID: usize = 2;
