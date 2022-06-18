@@ -102,3 +102,9 @@ impl DataManager {
         self.write_cluster_at(cluster_id, offset, f)
     }
 }
+
+// impl Drop for DataManager {
+//     fn drop(&mut self) {
+//         self.cluster_cache.data_cache_sync_all();
+//     }
+// }

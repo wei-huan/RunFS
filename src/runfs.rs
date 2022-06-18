@@ -40,13 +40,15 @@ impl RunFileSystem {
             FileAttributes::DIRECTORY,
             bpb.root_dir_cluster(),
         );
+        let fat_manager = Arc::new(RwLock::new(FATManager::new(
+            fsinfo,
+            bpb.clone(),
+            Arc::clone(&block_device),
+        )));
+        fat_manager.write().recalculate_fsinfo();
         Self {
             bpb: bpb.clone(),
-            fat_manager: Arc::new(RwLock::new(FATManager::new(
-                fsinfo,
-                bpb.clone(),
-                Arc::clone(&block_device),
-            ))),
+            fat_manager,
             data_manager: Arc::new(RwLock::new(DataManager::new(
                 bpb.clone(),
                 Arc::new(RwLock::new(root_dirent)),

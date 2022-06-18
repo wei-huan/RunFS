@@ -184,7 +184,15 @@ impl VFile {
                 |short_entry: &ShortDirectoryEntry| entry = *short_entry,
             );
         }
-        entry.write_at(offset, buf, &self.fs)
+        let size = entry.write_at(offset, buf, &self.fs);
+        if self.is_file() {
+            self.fs.read().data_manager_modify().modify_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |short_entry: &mut ShortDirectoryEntry| short_entry.set_size(size as u32),
+            );
+        }
+        size
     }
     /// 长文件名方式搜索, 只支持本级搜索, 不支持递归搜索
     fn find_long_name(&self, name: &str, dir_entry: &ShortDirectoryEntry) -> Option<VFile> {

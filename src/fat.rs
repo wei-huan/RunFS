@@ -236,6 +236,40 @@ impl FATManager {
             return num;
         }
     }
+    /// 创建文件系统时调用, 很多阴逼文件系统关闭时不回写, 泪目
+    pub fn recalculate_fsinfo(&mut self) {
+        // clusters
+        let mut cluster_id = START_CLUS_ID;
+        let mut num = 0;
+        let end_cluster = self.bpb.total_clusters() as usize + START_CLUS_ID;
+        while cluster_id < end_cluster {
+            if self.entry(cluster_id) == FATEntry::Free {
+                num += 1;
+            }
+            cluster_id += 1;
+        }
+        self.fsinfo.set_free_cluster_count(Some(num));
+        // next
+        if let Some(next) = self.fsinfo.next_free_cluster() {
+            if self.entry(next as usize) != FATEntry::Free {
+                // 从当前搜到末位
+                let new_next = self.search_free_cluster(next as usize);
+                self.fsinfo.set_next_free_cluster(new_next);
+            }
+        } else {
+            // 从开始搜到末位
+            cluster_id = START_CLUS_ID;
+            while cluster_id < end_cluster {
+                if self.entry(cluster_id) == FATEntry::Free {
+                    break;
+                }
+                cluster_id += 1;
+            }
+            if cluster_id < end_cluster {
+                self.fsinfo.set_next_free_cluster(Some(cluster_id as u32));
+            }
+        }
+    }
     /// 只是返回可以使用的簇 ID, 不对簇清零或者提供别的功能
     pub fn alloc_cluster(&mut self, prev: Option<u32>) -> Option<u32> {
         if let Some(free_id) = self.search_free_cluster(START_CLUS_ID) {

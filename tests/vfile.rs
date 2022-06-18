@@ -115,9 +115,11 @@ fn test_create_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    root_dir
-        .create("hello_world.txt", FileAttributes::FILE)
+    let file = root_dir
+        .create("helloworld.txt", FileAttributes::FILE)
         .unwrap();
+    let first = file.first_data_cluster();
+    println!("first: {:#X?}", first);
 }
 
 #[test]
@@ -172,32 +174,17 @@ fn test_write_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let mut buf = [0x0u8; 52];
     let text = root_dir.find_vfile_byname("text.txt").unwrap();
-    let mut buf = [0u8; 52];
     let len = text.read_at(0, &mut buf);
     println!("text read len: {:#}", len);
     let helloworld = root_dir.find_vfile_byname("helloworld.txt").unwrap();
     println!("Here0");
     let len = helloworld.write_at(0, &buf);
-    println!("text write len: {:#}", len);
+    println!("helloworld write len: {:#}", len);
     let mut buf1 = [0u8; 52];
     let len = helloworld.read_at(0, &mut buf1);
-    println!("text read len: {:#}", len);
+    println!("helloworld read len: {:#}", len);
     let s = String::from_utf8_lossy(&buf1);
     println!("{:#}", s);
 }
-
-// #[test]
-// fn test_write_file() {
-//     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-//     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-//     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-//     let text = root_dir.find_vfile_byname("text.txt").unwrap();
-//     let mut buf = [0x48u8; 52];
-//     let len = text.write_at(0, &buf);
-//     println!("text write len: {:#}", len);
-//     let len = text.read_at(0, &mut buf);
-//     println!("text read len: {:#}", len);
-//     let s = String::from_utf8_lossy(&buf);
-//     println!("{:#}", s);
-// }

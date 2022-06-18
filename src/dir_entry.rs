@@ -250,13 +250,13 @@ impl ShortDirectoryEntry {
                     .fat_manager_modify()
                     .count_clusters(self.first_cluster() as usize);
         }
-        // println!("read_at size = {}", size);
+        println!("read_at size = {}", size);
         // println!("1-0-0-1");
         let offset_end_pos = (offset + buf.len()).min(size);
-        // println!(
-        //     "read_at current_offset = {}; offset_end_pos = {}",
-        //     current_offset, offset_end_pos
-        // );
+        println!(
+            "read_at current_offset = {}; offset_end_pos = {}",
+            current_offset, offset_end_pos
+        );
         // println!("1-0-0-2");
         if current_offset >= offset_end_pos {
             return 0;
@@ -266,7 +266,7 @@ impl ShortDirectoryEntry {
             None => return 0,
             Some(id) => id,
         };
-        // println!("current_cluster: {}", current_cluster);
+        println!("current_cluster: {}", current_cluster);
         let mut read_size = 0usize;
         loop {
             // println!("1-0-0-3");
