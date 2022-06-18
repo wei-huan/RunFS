@@ -578,4 +578,81 @@ impl VFile {
             .write()
             .dealloc_clusters(first_cluster as usize, None)
     }
+    /// 获取目录中offset处目录项的信息 TODO:之后考虑和stat复用
+    /// 返回<name, offset, firstcluster,attributes>
+    pub fn dirent_info(&self, off: usize) -> Option<(String, u32, u32, FileAttributes)> {
+        if !self.is_dir() {
+            return None;
+        }
+        let mut long_entry = LongDirectoryEntry::default();
+        let mut offset = off;
+        let mut name = String::new();
+        let mut is_long = false;
+        //let mut order:u8 = 0;
+        loop {
+            let read_sz = self.fs.read().data_manager_modify().read_short_dirent(
+                self.short_cluster,
+                self.short_offset,
+                |curr_ent: &ShortDirectoryEntry| {
+                    curr_ent.read_at(offset, long_entry.as_bytes_mut(), &self.fs)
+                },
+            );
+            if read_sz != DIRENT_SZ {
+                return None;
+            }
+            if long_entry.is_free() {
+                //if meet delete ent, search should be restart
+                offset += DIRENT_SZ;
+                name.clear();
+                is_long = false;
+                continue;
+            }
+            // 名称拼接
+            if !long_entry.is_long() {
+                let (_, se_array, _) = unsafe {
+                    long_entry
+                        .as_bytes_mut()
+                        .align_to_mut::<ShortDirectoryEntry>()
+                };
+                let short_entry = se_array[0];
+                if !is_long {
+                    name = short_entry.get_name_lowercase();
+                }
+                //println!("---{}", short_ent.get_name_lowercase());
+                let attribute = short_entry.attribute();
+                let first_cluster = short_entry.first_cluster();
+                offset += DIRENT_SZ;
+                return Some((name, offset as u32, first_cluster, attribute));
+            } else {
+                is_long = true;
+                //order += 1;
+                name.insert_str(0, long_entry.get_name_format().as_str());
+                //println!("--{}", long_ent.get_name_format().as_str());
+            }
+            offset += DIRENT_SZ;
+        }
+    }
+    /// 获取目录中offset处目录项的信息 TODO:之后考虑和stat复用
+    /// 返回<size, atime, mtime, ctime>
+    pub fn stat(&self) -> (i64, i64, i64, i64, u64) {
+        let stat = self.fs.read().data_manager_modify().read_short_dirent(
+            self.short_cluster,
+            self.short_offset,
+            |short_entry: &ShortDirectoryEntry| {
+                let (_, _, _, _, _, _, ctime) = short_entry.get_creation_time();
+                let (_, _, _, _, _, _, atime) = short_entry.accessed_time();
+                let (_, _, _, _, _, _, mtime) = short_entry.modification_time();
+                let first_clu = short_entry.first_cluster();
+                (
+                    0i64,
+                    atime as i64,
+                    mtime as i64,
+                    ctime as i64,
+                    first_clu as u64,
+                )
+            },
+        );
+        stat.0 = self.size() as i64;
+        stat
+    }
 }
