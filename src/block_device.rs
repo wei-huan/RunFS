@@ -1,5 +1,5 @@
 use crate::error::IOError;
-use std::any::Any;
+use core::any::Any;
 
 pub trait BlockDevice: Send + Sync + Any {
     // TODO: read, write 要返回结果 Result

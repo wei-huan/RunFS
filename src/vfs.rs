@@ -4,8 +4,11 @@ use super::{
     LAST_LONG_ENTRY, LONG_NAME_LEN, SHORT_FILE_EXT_LEN, SHORT_FILE_NAME_LEN,
     SHORT_FILE_NAME_PADDING, SHORT_NAME_LEN,
 };
+use alloc::string::String;
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use spin::RwLock;
-use std::sync::Arc;
 
 /// 将长文件名拆分
 pub fn long_name_split(name: &str) -> Vec<[u16; LONG_NAME_LEN]> {
@@ -420,7 +423,7 @@ impl VFile {
             // 扩容
             if read_size == 0 {
                 let current_capacity = self.capacity();
-                println!("new_capacity: {}", current_capacity + num * DIRENT_SZ);
+                // println!("new_capacity: {}", current_capacity + num * DIRENT_SZ);
                 self.adjust_capacity(current_capacity + num * DIRENT_SZ)
                     .unwrap();
             }
@@ -434,7 +437,7 @@ impl VFile {
                     let current_capacity = self.capacity();
                     // 不够了,扩容后再读
                     if read_size == 0 && offset >= current_capacity {
-                        println!("new_capacity: {}", current_capacity + num * DIRENT_SZ);
+                        // println!("new_capacity: {}", current_capacity + num * DIRENT_SZ);
                         self.adjust_capacity(current_capacity + num * DIRENT_SZ)
                             .unwrap();
                         self.read_at(offset, tmp_dirent.as_bytes_mut());

@@ -116,7 +116,8 @@ fn test_create_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let file = root_dir
+    // let file =
+    root_dir
         .create("helloworld.txt", FileAttributes::FILE)
         .unwrap();
     // let first = file.first_data_cluster();

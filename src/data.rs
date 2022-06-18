@@ -1,8 +1,9 @@
 use super::{
     BiosParameterBlock, BlockDevice, ClusterCacheManager, LongDirectoryEntry, ShortDirectoryEntry,
 };
+#[cfg(not(feature = "std"))]
+use alloc::sync::Arc;
 use spin::RwLock;
-use std::sync::Arc;
 
 pub struct DataManager {
     root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项

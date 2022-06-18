@@ -1,7 +1,9 @@
 use super::RunFileSystem;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+use alloc::sync::Arc;
 use bitflags::bitflags;
 use spin::RwLock;
-use std::sync::Arc;
 
 const START_YEAR: u32 = 1980;
 

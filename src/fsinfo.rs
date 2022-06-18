@@ -2,8 +2,9 @@
 
 use super::{BlockDevice, START_CLUS_ID};
 use crate::error::FSError;
-use std::slice;
-use std::sync::Arc;
+#[cfg(not(feature = "std"))]
+use alloc::slice;
+use alloc::sync::Arc;
 
 const NO_INFORMATION: u32 = 0xFFFFFFFF;
 
@@ -135,7 +136,7 @@ impl FSInfoSector {
             || self.struc_signature != Self::STRUC_SIGNATURE
             || self.trail_signature != Self::TRAIL_SIGNATURE
         {
-            println!("invalid signature in FSInfo");
+            // println!("invalid signature in FSInfo");
             return Err(FSError::CorruptedFileSystem);
         }
         Ok(())
