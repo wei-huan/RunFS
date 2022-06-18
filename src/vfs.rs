@@ -492,7 +492,7 @@ impl VFile {
         ext.copy_from_slice(&short_name[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
         // 给文件或文件夹分配空间
         let first_data_cluster = self.fs.write().alloc_cluster(None).unwrap();
-        println!("first_data_cluster: {}", first_data_cluster);
+        // println!("first_data_cluster: {}", first_data_cluster);
         let short_entry = ShortDirectoryEntry::new(name, ext, attribute, first_data_cluster);
         let checksum = short_entry.checksum();
         // println!("0-0-0-2");
