@@ -191,3 +191,25 @@ fn test_write_file() {
     let s = String::from_utf8_lossy(&buf1);
     println!("{:#}", s);
 }
+
+#[test]
+fn test_dirent() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let mut buf = [0x0u8; 52];
+    let text = root_dir.find_vfile_byname("user_shell").unwrap();
+    let len = text.read_at(0, &mut buf);
+    println!("text read len: {:#}", len);
+}
+
+#[test]
+fn test_stat() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let mut buf = [0x0u8; 52];
+    let text = root_dir.find_vfile_byname("user_shell").unwrap();
+    let len = text.read_at(0, &mut buf);
+    println!("text read len: {:#}", len);
+}

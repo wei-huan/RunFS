@@ -413,6 +413,34 @@ impl LongDirectoryEntry {
         long_entry_name[11..13].copy_from_slice(&self.name3);
         long_entry_name
     }
+
+    /// 长文件名转字符串
+    pub fn name_format(&self) -> String {
+        let mut name = String::new();
+        let mut c: u8;
+        for i in 0..5 {
+            c = self.name1[i] as u8;
+            if c == 0 {
+                return name;
+            }
+            name.push(c as char);
+        }
+        for i in 0..6 {
+            c = self.name2[i] as u8;
+            if c == 0 {
+                return name;
+            }
+            name.push(c as char);
+        }
+        for i in 0..2 {
+            c = self.name3[i] as u8;
+            if c == 0 {
+                return name;
+            }
+            name.push(c as char);
+        }
+        return name;
+    }
     pub fn order(&self) -> u8 {
         self.order
     }
