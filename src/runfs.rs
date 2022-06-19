@@ -19,11 +19,12 @@ pub struct RunFileSystem {
 
 impl RunFileSystem {
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
+        log::info!("here");
         let boot_sector = BootSector::directly_new(Arc::clone(&block_device));
         let res = boot_sector.validate();
         match res {
             Ok(v) => v,
-            Err(e) => panic!("Bios Parameter Block not valid: {:?}", e),
+            Err(e) => log::error!("Bios Parameter Block not valid: {:?}", e),
         }
         let bpb = Arc::new(boot_sector.bpb);
         let fsinfo_block_id: usize = bpb.fsinfo_sector().try_into().unwrap();
@@ -31,7 +32,7 @@ impl RunFileSystem {
         let res = fsinfo_sector.validate();
         match res {
             Ok(v) => v,
-            Err(e) => panic!("FSInfo Block not valid: {:?}", e),
+            Err(e) => log::error!("FSInfo Block not valid: {:?}", e),
         }
         let mut fsinfo = FSInfo::new(
             fsinfo_sector.free_clusters_raw(),

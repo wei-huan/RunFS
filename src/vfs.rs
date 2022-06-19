@@ -553,6 +553,33 @@ impl VFile {
         // println!("0-0-0-5");
         return Some(Arc::new(vfile));
     }
+    // 清空文件
+    // pub fn clear(&self) {
+    //     // 难点:长名目录项也要修改
+    //     let first_cluster: u32 = self.first_cluster();
+    //     if self.is_dir() || first_cluster == 0 {
+    //         return;
+    //     }
+    //     for i in 0..self.long_pos_vec.len() {
+    //         self.modify_long_dirent(i, |long_ent: &mut LongDirectoryEntry| {
+    //             long_ent.clear();
+    //         });
+    //     }
+    //     self.modify_short_dirent(|short_ent: &mut ShortDirectoryEntry| {
+    //         short_ent.clear();
+    //     });
+    //     let all_clusters = self
+    //         .fs
+    //         .read()
+    //         .get_fat()
+    //         .read()
+    //         .get_all_cluster_of(first_cluster, self.block_device.clone());
+    //     //self.fs.write().dealloc_cluster(all_clusters);
+    //     let fs_reader = self.fs.read();
+    //     fs_reader.dealloc_cluster(all_clusters);
+    //     //fs_reader.cache_write_back();
+    // }
+
     /// 目前只支持删除文件自己, 不能递归删除, 也无法清空文件夹, 如果文件夹里有东西, 那就等着悬空吧
     pub fn delete(&self) -> usize {
         // println!(
