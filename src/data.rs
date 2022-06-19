@@ -53,7 +53,10 @@ impl DataManager {
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&T) -> V,
-    ) -> V {
+    ) -> V
+// where
+    //     T: ?Sized,
+    {
         let cache = self.cluster_cache.get_cache(cluster_id);
         let cache_read = cache.read();
         let cache_ref = cache_read.get_ref(offset);
