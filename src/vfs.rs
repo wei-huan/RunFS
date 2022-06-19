@@ -335,28 +335,47 @@ impl VFile {
         if res.is_some() {
             return res;
         } else {
+            // 如果是 .. 则只能用短文件名搜索
             return self.find_short_name(name, &short_entry);
         }
     }
     /// 根据路径递归搜索, 需要区分是绝对路径还是相对路径
-    pub fn find_vfile_bypath(&self, path: Vec<&str>) -> Option<Arc<VFile>> {
-        let _ = self.fs.read(); // 获取读锁
-        let len = path.len();
-        if len == 0 {
+    pub fn find_vfile_bypath(&self, path: &str) -> Option<Arc<VFile>> {
+        let pathv: Vec<&str> = path.split('/').collect();
+        let len = pathv.len();
+        if pathv.len() == 0 {
             return None;
         }
-        let mut current_vfile = self.clone();
-        for i in 0..len {
-            if path[i] == "" || path[i] == "." {
-                continue;
+        // 如果第一个串为空, 说明是绝对路径
+        if pathv[0] == "" {
+            let mut current_vfile = self.fs.read().root_vfile(&self.fs);
+            for i in 1..len {
+                if pathv[i] == "" || pathv[i] == "." {
+                    continue;
+                }
+                if let Some(vfile) = current_vfile.find_vfile_byname(pathv[i]) {
+                    current_vfile = vfile;
+                } else {
+                    return None;
+                }
             }
-            if let Some(vfile) = current_vfile.find_vfile_byname(path[i]) {
-                current_vfile = vfile;
-            } else {
-                return None;
-            }
+            Some(Arc::new(current_vfile))
         }
-        Some(Arc::new(current_vfile))
+        // 如果第一个串不为空, 说明是相对路径
+        else {
+            let mut current_vfile = self.clone();
+            for i in 0..len {
+                if pathv[i] == "" || pathv[i] == "." {
+                    continue;
+                }
+                if let Some(vfile) = current_vfile.find_vfile_byname(pathv[i]) {
+                    current_vfile = vfile;
+                } else {
+                    return None;
+                }
+            }
+            Some(Arc::new(current_vfile))
+        }
     }
     /// 计算文件或文件夹大小, 如果是文件夹, 大小就是全部目录项的总字节数, 如果是文件, 大小就是内容的字节数
     pub fn size(&self) -> usize {
@@ -672,7 +691,7 @@ impl VFile {
         stat
     }
     pub fn ls(&self) -> Option<Vec<(String, FileAttributes)>> {
-        if !self.is_dir() {
+        if self.is_file() {
             return None;
         }
         let mut list: Vec<(String, FileAttributes)> = Vec::new();

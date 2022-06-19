@@ -231,3 +231,16 @@ fn test_ls() {
     println!("Time elapsed is: {:?}", duration);
     println!("ls: {:#?}", ls);
 }
+
+#[test]
+fn test_find_file_by_path() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let path = String::from("/abb/bba");
+    let vfile = root_dir.find_vfile_bypath(&path).unwrap();
+    println!("vfile: {:#?}", vfile.name());
+    let path_rela = String::from("../ccc/text.txt");
+    let vfile_rela = vfile.find_vfile_bypath(&path_rela).unwrap();
+    println!("vfile: {:#?}", vfile_rela.name());
+}
