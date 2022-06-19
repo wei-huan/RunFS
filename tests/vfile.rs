@@ -211,10 +211,23 @@ fn test_dirent_info() {
     use std::time::Instant;
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-    let start = Instant::now();
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let start = Instant::now();
     let info = root_dir.dirent_info(128);
     let duration = start.elapsed();
     println!("Time elapsed is: {:?}", duration);
     println!("info: {:#?}", info);
+}
+
+#[test]
+fn test_ls() {
+    use std::time::Instant;
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let start = Instant::now();
+    let ls = root_dir.ls();
+    let duration = start.elapsed();
+    println!("Time elapsed is: {:?}", duration);
+    println!("ls: {:#?}", ls);
 }

@@ -134,6 +134,10 @@ impl VFile {
     pub fn is_file(&self) -> bool {
         !self.is_dir()
     }
+    pub fn clear_cache(&self) {
+        // let fat = self.fs.read();
+        // fat.cache_write_back();
+    }
     pub fn first_data_cluster(&self) -> u32 {
         if self.is_root() {
             self.fs.read().bpb().root_dir_cluster()
@@ -578,8 +582,8 @@ impl VFile {
             .write()
             .dealloc_clusters(first_cluster as usize, None)
     }
-    /// 获取目录中offset处目录项的信息
-    /// 返回<name, offset, first_cluster, attributes>
+    /// 获取目录中 offset 处目录项的信息
+    /// 如果 offset 处内容为空, 则返回空, 成功返回<name, offset, first_cluster, attributes>
     pub fn dirent_info(&self, mut offset: usize) -> Option<(String, usize, u32, FileAttributes)> {
         if !self.is_dir() {
             return None;
@@ -639,5 +643,24 @@ impl VFile {
         );
         stat.0 = self.size() as i64;
         stat
+    }
+    pub fn ls(&self) -> Option<Vec<(String, FileAttributes)>> {
+        if !self.is_dir() {
+            return None;
+        }
+        let mut list: Vec<(String, FileAttributes)> = Vec::new();
+        let capacity = self.capacity();
+        let mut offset = 0;
+        while offset < capacity {
+            let item = self.dirent_info(offset);
+            match item {
+                None => offset += DIRENT_SZ,
+                Some(s) => {
+                    list.push((s.0, s.3));
+                    offset = s.1 + DIRENT_SZ
+                }
+            }
+        }
+        return Some(list);
     }
 }
