@@ -160,13 +160,17 @@ fn test_create_file_in_subdir() {
 
 #[test]
 fn test_read_file() {
+    use std::time::Instant;
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
     let text = root_dir.find_vfile_byname("open").unwrap();
     let mut buf = [0u8; 62400];
+    let start = Instant::now();
     let len = text.read_at(0, &mut buf);
-    println!("buf: {:?}", buf);
+    let duration = start.elapsed();
+    println!("Time elapsed is: {:?}", duration);
+    // println!("buf: {:?}", buf);
     println!("text len: {:#}", len);
     // let s = String::from_utf8_lossy(&buf);
     // println!("{:#}", s);
@@ -193,23 +197,24 @@ fn test_write_file() {
 }
 
 #[test]
-fn test_dirent() {
-    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
-    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
-    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let mut buf = [0x0u8; 52];
-    let text = root_dir.find_vfile_byname("user_shell").unwrap();
-    let len = text.read_at(0, &mut buf);
-    println!("text read len: {:#}", len);
-}
-
-#[test]
 fn test_stat() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let mut buf = [0x0u8; 52];
     let text = root_dir.find_vfile_byname("user_shell").unwrap();
-    let len = text.read_at(0, &mut buf);
-    println!("text read len: {:#}", len);
+    let stat = text.stat();
+    println!("shell stat: {:#?}", stat);
+}
+
+#[test]
+fn test_dirent_info() {
+    use std::time::Instant;
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
+    let start = Instant::now();
+    let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
+    let info = root_dir.dirent_info(128);
+    let duration = start.elapsed();
+    println!("Time elapsed is: {:?}", duration);
+    println!("info: {:#?}", info);
 }

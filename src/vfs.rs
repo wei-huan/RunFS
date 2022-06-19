@@ -580,22 +580,15 @@ impl VFile {
     }
     /// 获取目录中offset处目录项的信息
     /// 返回<name, offset, first_cluster, attributes>
-    pub fn dirent_info(&self, off: usize) -> Option<(String, u32, u32, FileAttributes)> {
+    pub fn dirent_info(&self, mut offset: usize) -> Option<(String, usize, u32, FileAttributes)> {
         if !self.is_dir() {
             return None;
         }
         let mut long_entry = LongDirectoryEntry::default();
-        let mut offset = off;
         let mut name = String::new();
         // 读第一个长文件名目录项
-        let read_sz = self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |curr_ent: &ShortDirectoryEntry| {
-                curr_ent.read_at(offset, long_entry.as_bytes_mut(), &self.fs)
-            },
-        );
-        if read_sz != DIRENT_SZ
+        let mut read_size = self.read_at(offset, long_entry.as_bytes_mut());
+        if read_size != DIRENT_SZ
             || !long_entry.is_long()
             || long_entry.is_free()
             || !long_entry.is_last()
@@ -607,14 +600,8 @@ impl VFile {
         name.insert_str(0, long_entry.name_format().as_str());
         for _ in 1..raw_order {
             offset += DIRENT_SZ;
-            let read_sz = self.fs.read().data_manager_modify().read_short_dirent(
-                self.short_cluster,
-                self.short_offset,
-                |curr_ent: &ShortDirectoryEntry| {
-                    curr_ent.read_at(offset, long_entry.as_bytes_mut(), &self.fs)
-                },
-            );
-            if read_sz != DIRENT_SZ {
+            read_size = self.read_at(offset, long_entry.as_bytes_mut());
+            if read_size != DIRENT_SZ || !long_entry.is_long() || long_entry.is_free() {
                 return None;
             }
             name.insert_str(0, long_entry.name_format().as_str());
@@ -622,19 +609,13 @@ impl VFile {
         // 读短文件名目录项
         let mut short_entry = ShortDirectoryEntry::default();
         offset += DIRENT_SZ;
-        let read_sz = self.fs.read().data_manager_modify().read_short_dirent(
-            self.short_cluster,
-            self.short_offset,
-            |curr_ent: &ShortDirectoryEntry| {
-                curr_ent.read_at(offset, short_entry.as_bytes_mut(), &self.fs)
-            },
-        );
-        if read_sz != DIRENT_SZ {
+        read_size = self.read_at(offset, short_entry.as_bytes_mut());
+        if read_size != DIRENT_SZ || !short_entry.is_short() || short_entry.is_free() {
             return None;
         }
         let attribute = short_entry.attribute();
         let first_cluster = short_entry.first_cluster();
-        return Some((name, offset as u32, first_cluster, attribute));
+        return Some((name, offset, first_cluster, attribute));
     }
     /// 获取目录中offset处目录项的信息 TODO:之后考虑和stat复用
     /// 返回<size, atime, mtime, ctime>
