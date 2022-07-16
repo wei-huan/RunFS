@@ -1,13 +1,11 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表区
 use super::{BiosParameterBlock, BlockDevice};
 use crate::config::{INFOSEC_CACHE_SZ, MAX_SEC_SZ};
-use spin::RwLock;
-
-use alloc::collections::VecDeque;
 #[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{collections::VecDeque, sync::Arc, vec, vec::Vec};
+#[cfg(feature = "std")]
+use std::{collections::VecDeque, sync::Arc};
+use spin::RwLock;
 
 // 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {

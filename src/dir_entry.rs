@@ -1,9 +1,10 @@
 use super::RunFileSystem;
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
-use alloc::sync::Arc;
+use alloc::{string::String, sync::Arc};
 use bitflags::bitflags;
 use spin::RwLock;
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 const START_YEAR: u32 = 1980;
 
@@ -41,7 +42,7 @@ pub const LAST_LONG_ENTRY: u8 = 0x40;
 /// 短目录项,也适用于当前目录项和上级目录项
 /// 短目录项实际就是文件和文件夹的句柄
 
-#[repr(C, packed(1))]
+#[repr(packed)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ShortDirectoryEntry {
     name: [u8; SHORT_FILE_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
@@ -306,6 +307,7 @@ impl ShortDirectoryEntry {
                 Some(id) => id,
             };
         }
+        // println!("read_size: {}", read_size);
         // println!("1-0-0-5");
         read_size
     }
@@ -374,31 +376,29 @@ impl ShortDirectoryEntry {
 
 /// 长目录项, 一般来说现在的 OS 无论创建的文件或目录的名字是否超
 /// 出短目录项要求都会在短目录项前添加长目录项
-#[repr(C, packed(1))]
+/// , packed(1)
+#[repr(packed)]
 #[derive(Default)]
 pub struct LongDirectoryEntry {
     order: u8,                 // 从1开始计数, 删除时为0xE5
-    name1: [u16; 5],           // 5characters
+    name1: [u8; 10],           // 5characters
     attribute: FileAttributes, // should be 0x0F
     type_: u8,
     checksum: u8,
-    name2: [u16; 6], // 6characters
+    name2: [u8; 12], // 6characters
     zero: [u8; 2],
-    name3: [u16; 2], // 2characters
+    name3: [u8; 4], // 2characters
 }
 
 impl LongDirectoryEntry {
     pub fn new(name: [u16; LONG_NAME_LEN], order: u8, checksum: u8) -> Self {
-        // println!("1-0-0-0-0");
         let mut entry = Self {
             order,
             checksum,
             attribute: FileAttributes::LONG_NAME,
             ..Self::default()
         };
-        // println!("1-0-0-0-1");
         entry.name_from_slice(&name);
-        // println!("1-0-0-0-2");
         entry
     }
     pub fn name_from_slice(&mut self, lfn_part: &[u16; LONG_NAME_LEN]) {

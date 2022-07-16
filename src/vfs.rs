@@ -4,11 +4,13 @@ use super::{
     LAST_LONG_ENTRY, LONG_NAME_LEN, SHORT_FILE_EXT_LEN, SHORT_FILE_NAME_LEN,
     SHORT_FILE_NAME_PADDING, SHORT_NAME_LEN,
 };
-use alloc::string::String;
 #[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use crate::println;
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, sync::Arc, vec::Vec};
 use spin::RwLock;
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 /// 将长文件名拆分
 pub fn long_name_split(name: &str) -> Vec<[u16; LONG_NAME_LEN]> {
@@ -204,8 +206,8 @@ impl VFile {
     /// 长文件名方式搜索, 只支持本级搜索, 不支持递归搜索
     fn find_long_name(&self, name: &str, dir_entry: &ShortDirectoryEntry) -> Option<VFile> {
         // 名字已经做了逆序处理
+        // println!("name: {:#?}", name);
         let name_vec: Vec<[u16; LONG_NAME_LEN]> = long_name_split(name).into_iter().rev().collect();
-        // println!("name_vec: {:#?}", name_vec);
         let entry_num = name_vec.len();
         let mut long_entry = LongDirectoryEntry::default();
         let mut long_pos_vec: Vec<(usize, usize)> = Vec::new();
@@ -216,14 +218,17 @@ impl VFile {
             long_pos_vec.clear();
             // 读取 offset 处的目录项
             let mut read_sz = dir_entry.read_at(dir_offset, long_entry.as_bytes_mut(), &self.fs);
+            // println!("here0");
             // 以下成立说明读到头了
             if read_sz != DIRENT_SZ {
                 return None;
             }
+            // println!("here1");
             if long_entry.is_free() {
                 dir_offset += DIRENT_SZ;
                 continue;
             }
+            // println!("here2");
             let long_entry_name = long_entry.name_to_array();
             // println!("long_entry_name: {:#?}", long_entry_name);
             if long_entry_name == name_last && long_entry.is_long() {
@@ -348,8 +353,10 @@ impl VFile {
         }
         // 如果第一个串为空, 说明是绝对路径
         if pathv[0] == "" {
+            println!("here0");
             let mut current_vfile = self.fs.read().root_vfile(&self.fs);
             for i in 1..len {
+                println!("here1");
                 if pathv[i] == "" || pathv[i] == "." {
                     continue;
                 }
@@ -359,6 +366,7 @@ impl VFile {
                     return None;
                 }
             }
+            println!("here100");
             Some(Arc::new(current_vfile))
         }
         // 如果第一个串不为空, 说明是相对路径
@@ -491,25 +499,25 @@ impl VFile {
     }
     /// 在当前目录下创建文件或目录
     pub fn create(&self, filename: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
-        // println!("0-0-0-0");
         // 判断是否是文件夹
         assert!(self.is_dir());
+        /* 如果已经存在了就返回 None */
         if self.is_already_exist(filename, attribute) {
             return None;
         }
+        /* 不存在就创建文件 */
         // 长文件名拆分
         let mut long_name_vec = long_name_split(filename);
         let long_entry_num = long_name_vec.len();
+        // println!("need_dirent: {}", long_entry_num + 1);
         // 搜索能够在文件夹里创建足够目录项的空处
         let mut dirent_offset: usize;
         if let Some(offset) = self.find_free_dirents(long_entry_num + 1) {
             dirent_offset = offset;
-            // println!("dirent_offset: {}", dirent_offset);
         } else {
-            // println!("0-0-0-1");
             return None;
         }
-        // println!("need_dirent: {}", long_entry_num + 1);
+        // println!("dirent_offset: {}", dirent_offset);
         // 生成短文件名及对应目录项
         let short_name: [u8; SHORT_NAME_LEN] = generate_short_name(filename);
         let mut name = [0u8; SHORT_FILE_NAME_LEN];
@@ -521,7 +529,6 @@ impl VFile {
         // println!("first_data_cluster: {}", first_data_cluster);
         let short_entry = ShortDirectoryEntry::new(name, ext, attribute, first_data_cluster);
         let checksum = short_entry.checksum();
-        // println!("0-0-0-2");
         // println!("long_entry_num: {}", long_entry_num);
         // 写长目录项
         for i in 0..long_entry_num {
@@ -537,16 +544,15 @@ impl VFile {
             dirent_offset += DIRENT_SZ;
             // println!("dirent_offset: {}", dirent_offset);
         }
-        // println!("0-0-0-3");
         // 写短目录项
         assert_eq!(
             self.write_at(dirent_offset, short_entry.as_bytes()),
             DIRENT_SZ
         );
+        // 检查文件是否创建成功
         let vfile = self.find_vfile_byname(filename).unwrap();
         // 如果是目录类型，需要创建 .和 ..(根目录不需要, 但显然不会去创建根目录)
         if attribute.contains(FileAttributes::DIRECTORY) {
-            // println!("0-0-0-4");
             let dot: [u8; SHORT_NAME_LEN] = generate_short_name(".");
             name.copy_from_slice(&dot[0..SHORT_FILE_NAME_LEN]);
             ext.copy_from_slice(&dot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
@@ -569,7 +575,6 @@ impl VFile {
             vfile.write_at(0, self_dir.as_bytes());
             vfile.write_at(DIRENT_SZ, parent_dir.as_bytes());
         }
-        // println!("0-0-0-5");
         return Some(Arc::new(vfile));
     }
     // 清空文件

@@ -3,8 +3,9 @@ use super::{
     BiosParameterBlock, BlockDevice, FSInfo, FSInfoSector, SectorCacheManager, START_CLUS_ID,
 };
 #[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 const BYTES_PER_ENTRY: usize = 4;
 const BAD_CLUSTER: u32 = 0x0FFF_FFF7;

@@ -4,11 +4,10 @@ use crate::config::MAX_CLUS_SZ;
 use crate::dir_entry::DIRENT_SZ;
 use crate::error::FSError;
 use crate::START_CLUS_ID;
-
-use alloc::slice;
-use alloc::str;
 #[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
+use alloc::{slice, str, sync::Arc};
+#[cfg(feature = "std")]
+use std::{str, sync::Arc, slice};
 
 // BPB 79 Byte
 #[repr(C, packed(1))]
@@ -280,7 +279,6 @@ impl BootSector {
     }
     // 直接通过块设备读取获得启动扇区, 只用于 RunFileSystem 创建
     pub fn directly_new(block_device: Arc<dyn BlockDevice>) -> Self {
-        // // println!("size of BootSector: {}", core::mem::size_of::<BootSector>());
         let boot_sector = BootSector::default();
         // 调试没问题,能够获取 512 Byte 准确数据
         let sector_slice = unsafe {

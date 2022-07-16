@@ -4,6 +4,8 @@ use super::{
 #[cfg(not(feature = "std"))]
 use alloc::sync::Arc;
 use spin::RwLock;
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 pub struct DataManager {
     root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项

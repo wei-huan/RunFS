@@ -3,12 +3,11 @@ use super::{
     BiosParameterBlock, BlockDevice, BootSector, DataManager, FATManager, FSInfo, FSInfoSector,
     FileAttributes, ShortDirectoryEntry, VFile,
 };
-use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-
-use alloc::string::String;
 #[cfg(not(feature = "std"))]
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use alloc::{string::String, sync::Arc, vec::Vec};
+use spin::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+#[cfg(feature = "std")]
+use std::sync::Arc;
 
 /// 包括 BPB 和 FSInfo 的信息
 pub struct RunFileSystem {
@@ -19,7 +18,6 @@ pub struct RunFileSystem {
 
 impl RunFileSystem {
     pub fn new(block_device: Arc<dyn BlockDevice>) -> Self {
-        log::info!("here");
         let boot_sector = BootSector::directly_new(Arc::clone(&block_device));
         let res = boot_sector.validate();
         match res {

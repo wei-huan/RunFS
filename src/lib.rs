@@ -3,6 +3,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+
 mod block_device;
 mod boot_sector;
 mod cluster_cache;
@@ -13,8 +14,16 @@ mod error;
 mod fat;
 mod fsinfo;
 mod runfs;
+#[cfg(not(feature = "std"))]
+mod sbi;
 mod sector_cache;
 mod vfs;
+
+#[macro_use]
+#[cfg(not(feature = "std"))]
+mod console;
+
+
 
 use cluster_cache::ClusterCacheManager;
 use data::DataManager;

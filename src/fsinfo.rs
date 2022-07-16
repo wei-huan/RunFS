@@ -3,8 +3,9 @@
 use super::{BlockDevice, START_CLUS_ID};
 use crate::error::FSError;
 #[cfg(not(feature = "std"))]
-use alloc::slice;
-use alloc::sync::Arc;
+use alloc::{slice, sync::Arc};
+#[cfg(feature = "std")]
+use std::{slice, sync::Arc};
 
 const NO_INFORMATION: u32 = 0xFFFFFFFF;
 
