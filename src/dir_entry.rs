@@ -43,13 +43,13 @@ pub const LAST_LONG_ENTRY: u8 = 0x40;
 /// 短目录项实际就是文件和文件夹的句柄
 
 #[repr(packed)]
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Default)]
 pub struct ShortDirectoryEntry {
     name: [u8; SHORT_FILE_NAME_LEN], // 删除时第0位为0xE5，未使用时为0x00. 有多余可以用0x20填充
     extension: [u8; SHORT_FILE_EXT_LEN],
     attribute: FileAttributes, //可以用于判断是目录还是文件或者卷标
-    os_reserved: u8,
-    creation_tenths: u8,
+    _os_reserved: u8,
+    _creation_tenths: u8,
     creation_time: u16,
     creation_date: u16,
     last_acc_date: u16,
@@ -381,13 +381,13 @@ impl ShortDirectoryEntry {
 #[derive(Default)]
 pub struct LongDirectoryEntry {
     order: u8,                 // 从1开始计数, 删除时为0xE5
-    name1: [u8; 10],           // 5characters
+    name1: [u16; 5],           // 5characters
     attribute: FileAttributes, // should be 0x0F
-    type_: u8,
+    _type: u8,
     checksum: u8,
-    name2: [u8; 12], // 6characters
-    zero: [u8; 2],
-    name3: [u8; 4], // 2characters
+    name2: [u16; 6], // 6characters
+    _zero: [u8; 2],
+    name3: [u16; 2], // 2characters
 }
 
 impl LongDirectoryEntry {
@@ -401,16 +401,45 @@ impl LongDirectoryEntry {
         entry.name_from_slice(&name);
         entry
     }
-    pub fn name_from_slice(&mut self, lfn_part: &[u16; LONG_NAME_LEN]) {
-        self.name1.copy_from_slice(&lfn_part[0..5]);
-        self.name2.copy_from_slice(&lfn_part[5..11]);
-        self.name3.copy_from_slice(&lfn_part[11..13]);
+    pub fn name_from_slice(&mut self, long_entry_name: &[u16; LONG_NAME_LEN]) {
+        // self.name1.copy_from_slice(&lfn_part[0..5]);
+        // self.name2.copy_from_slice(&lfn_part[5..11]);
+        // self.name3.copy_from_slice(&lfn_part[11..13]);
+
+        self.name1[0] = long_entry_name[0];
+        self.name1[1] = long_entry_name[1];
+        self.name1[2] = long_entry_name[2];
+        self.name1[3] = long_entry_name[3];
+        self.name1[4] = long_entry_name[4];
+        self.name2[0] = long_entry_name[5];
+        self.name2[1] = long_entry_name[6];
+        self.name2[2] = long_entry_name[7];
+        self.name2[3] = long_entry_name[8];
+        self.name2[4] = long_entry_name[9];
+        self.name2[5] = long_entry_name[10];
+        self.name3[0] = long_entry_name[11];
+        self.name3[1] = long_entry_name[12];
     }
     pub fn name_to_array(&self) -> [u16; LONG_NAME_LEN] {
         let mut long_entry_name = [0u16; LONG_NAME_LEN];
-        long_entry_name[0..5].copy_from_slice(&self.name1);
-        long_entry_name[5..11].copy_from_slice(&self.name2);
-        long_entry_name[11..13].copy_from_slice(&self.name3);
+        // long_entry_name[0..5].copy_from_slice(&self.name1);
+        // long_entry_name[5..11].copy_from_slice(&self.name2);
+        // long_entry_name[11..13].copy_from_slice(&self.name3);
+        long_entry_name[0] = self.name1[0];
+        long_entry_name[1] = self.name1[1];
+        long_entry_name[2] = self.name1[2];
+        long_entry_name[3] = self.name1[3];
+        long_entry_name[4] = self.name1[4];
+
+        long_entry_name[5] = self.name2[0];
+        long_entry_name[6] = self.name2[1];
+        long_entry_name[7] = self.name2[2];
+        long_entry_name[8] = self.name2[3];
+        long_entry_name[9] = self.name2[4];
+        long_entry_name[10] = self.name2[5];
+
+        long_entry_name[11] = self.name3[0];
+        long_entry_name[12] = self.name3[1];
         long_entry_name
     }
 

@@ -23,8 +23,6 @@ mod vfs;
 #[cfg(not(feature = "std"))]
 mod console;
 
-
-
 use cluster_cache::ClusterCacheManager;
 use data::DataManager;
 use dir_entry::{

@@ -168,7 +168,6 @@ impl VFile {
         )
     }
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
-        // println!("0-1-0-0");
         let mut entry = ShortDirectoryEntry::default();
         if self.is_root() {
             entry = self.fs.read().root_dirent();
@@ -353,10 +352,10 @@ impl VFile {
         }
         // 如果第一个串为空, 说明是绝对路径
         if pathv[0] == "" {
-            println!("here0");
+            // println!("here0");
             let mut current_vfile = self.fs.read().root_vfile(&self.fs);
             for i in 1..len {
-                println!("here1");
+                // println!("here1");
                 if pathv[i] == "" || pathv[i] == "." {
                     continue;
                 }
@@ -366,7 +365,7 @@ impl VFile {
                     return None;
                 }
             }
-            println!("here100");
+            // println!("here100");
             Some(Arc::new(current_vfile))
         }
         // 如果第一个串不为空, 说明是相对路径
