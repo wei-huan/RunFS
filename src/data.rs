@@ -8,7 +8,7 @@ use spin::RwLock;
 use std::sync::Arc;
 
 pub struct DataManager {
-    root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // 根目录项
+    root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // root entry, logic entry for / directory
     cluster_cache: ClusterCacheManager,
 }
 
@@ -97,7 +97,7 @@ impl DataManager {
         f(cache_mut)
     }
 
-    pub fn copy_cluster_at(&mut self, cluster_id: usize, offset: usize, buf: &mut [u8]) {
+    pub fn read_copy_cluster_at(&mut self, cluster_id: usize, offset: usize, buf: &mut [u8]) {
         let cache = self.cluster_cache.get_cache(cluster_id);
         let cluster_size = self.cluster_cache.bpb.cluster_size() as usize;
         assert!(offset < cluster_size);
@@ -105,6 +105,18 @@ impl DataManager {
         let cache_read = cache.read();
         let cache_ref = cache_read.cache_ref_offset(offset, len);
         buf.copy_from_slice(cache_ref);
+    }
+
+    pub fn write_copy_cluster_at(&mut self, cluster_id: usize, offset: usize, buf: &[u8]) {
+        let cache = self.cluster_cache.get_cache(cluster_id);
+        let cluster_size = self.cluster_cache.bpb.cluster_size() as usize;
+        assert!(offset < cluster_size);
+        println!("offset: {}", offset);
+        let len = buf.len().min(cluster_size - offset);
+        println!("len: {}", len);
+        let mut cache_write = cache.write();
+        let cache_mut = cache_write.cache_mut_offset(offset, len);
+        cache_mut.copy_from_slice(buf);
     }
 
     pub fn read_short_dirent<V>(

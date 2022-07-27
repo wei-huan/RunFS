@@ -21,7 +21,7 @@ impl ClusterCache {
         block_dev: Arc<dyn BlockDevice>,
         bpb: Arc<BiosParameterBlock>,
     ) -> Self {
-        let total_clusters: usize = bpb.total_clusters().try_into().unwrap();
+        let total_clusters = bpb.total_clusters() as usize;
         let end_cluster_id: usize = total_clusters + START_CLUS_ID;
         assert!(
             cluster_id >= START_CLUS_ID && cluster_id <= end_cluster_id,
@@ -54,22 +54,26 @@ impl ClusterCache {
     //     &self.cache
     // }
     // pub fn cache_mut(&mut self) -> &mut [u8] {
+    //     self.set_modify();
     //     &mut self.cache
     // }
     pub fn cache_ref_offset(&self, offset: usize, len: usize) -> &[u8] {
-        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
+        let cluster_size: usize = self.bpb.cluster_size() as usize;
         assert!(offset + len <= cluster_size);
         &self.cache[offset..offset + len]
     }
-    // pub fn cache_mut_offset(&mut self, offset: usize) -> &mut [u8] {
-    //     &mut self.cache[offset..]
-    // }
+    pub fn cache_mut_offset(&mut self, offset: usize, len: usize) -> &mut [u8] {
+        let cluster_size: usize = self.bpb.cluster_size() as usize;
+        assert!(offset + len <= cluster_size);
+        self.set_modify();
+        &mut self.cache[offset..offset + len]
+    }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
     {
         let type_size = core::mem::size_of::<T>();
-        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
+        let cluster_size: usize = self.bpb.cluster_size() as usize;
         assert!(offset + type_size <= cluster_size);
         unsafe {
             &*((&self.cache[offset..offset + type_size]).as_ptr() as *const _ as usize as *const T)

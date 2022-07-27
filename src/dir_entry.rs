@@ -234,7 +234,7 @@ impl ShortDirectoryEntry {
         // println!("first_cluster: {}", self.first_cluster() as usize);
         (current_cluster, offset % bytes_per_cluster)
     }
-    /// 以偏移量读取文件, 返回实际读取的长度
+    /// 以偏移量读取, 返回实际读取的长度
     pub fn read_at(
         &self,
         offset: usize,
@@ -282,7 +282,7 @@ impl ShortDirectoryEntry {
             let offset_in_cluster = current_offset % cluster_size;
             // println!("offset_in_cluster = {}", offset_in_cluster);
             let dst = &mut buf[read_size..read_size + cluster_read_size];
-            runfs.read().data_manager_modify().copy_cluster_at(
+            runfs.read().data_manager_modify().read_copy_cluster_at(
                 current_cluster,
                 offset_in_cluster,
                 dst,
@@ -318,48 +318,56 @@ impl ShortDirectoryEntry {
         read_size
     }
 
-    /// 以偏移量写文件
+    /// 以偏移量写入, 不能扩大文件, 返回实际写入的长度
     pub fn write_at(&self, offset: usize, buf: &[u8], runfs: &Arc<RwLock<RunFileSystem>>) -> usize {
-        let cluster_size = runfs.read().bpb().cluster_size() as usize;
         let mut current_offset = offset;
+        let cluster_size = runfs.read().bpb().cluster_size();
         let capacity = cluster_size
             * runfs
                 .read()
                 .fat_manager_modify()
                 .count_clusters(self.first_cluster() as usize) as usize;
-        // println!("write_at size = {}", capacity);
+        println!("write_at size = {}", capacity);
         let offset_end_pos = (offset + buf.len()).min(capacity);
         if current_offset >= offset_end_pos {
             return 0;
         }
-        // println!(
-        //     "write_at current_offset = {}; offset_end_pos = {}",
-        //     current_offset, offset_end_pos
-        // );
+        println!(
+            "write_at current_offset = {}; offset_end_pos = {}",
+            current_offset, offset_end_pos
+        );
         let (cluster_id, _) = self.pos(offset, runfs);
         let mut current_cluster = match cluster_id {
             None => return 0,
             Some(id) => id,
         };
-        // println!("current_cluster = {}", current_cluster);
+        println!("current_cluster = {}", current_cluster);
         let mut write_size = 0usize;
         loop {
             // 将偏移量向上对齐簇大小
             let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
             current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
+            println!("current_cluster_end_pos = {}", current_cluster_end_pos);
             // 开始写
             let cluster_write_size = current_cluster_end_pos - current_offset;
+            // println!("cluster_read_size = {}", cluster_read_size);
             let offset_in_cluster = current_offset % cluster_size;
+            // println!("offset_in_cluster = {}", offset_in_cluster);
             let src = &buf[write_size..write_size + cluster_write_size];
-            for i in 0..cluster_write_size {
-                runfs.read().data_manager_modify().write_cluster_at(
-                    current_cluster,
-                    offset_in_cluster + i,
-                    |data: &mut u8| {
-                        *data = src[i];
-                    },
-                );
-            }
+            runfs.read().data_manager_modify().write_copy_cluster_at(
+                current_cluster,
+                offset_in_cluster,
+                src,
+            );
+            // for i in 0..cluster_write_size {
+            //     runfs.read().data_manager_modify().write_cluster_at(
+            //         current_cluster,
+            //         offset_in_cluster + i,
+            //         |data: &mut u8| {
+            //             *data = src[i];
+            //         },
+            //     );
+            // }
             // 更新写入长度
             write_size += cluster_write_size;
             if current_cluster_end_pos == offset_end_pos {
@@ -376,6 +384,7 @@ impl ShortDirectoryEntry {
                 Some(id) => id,
             };
         }
+        println!("write_size: {}", write_size);
         write_size
     }
 }

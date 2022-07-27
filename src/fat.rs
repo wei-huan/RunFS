@@ -241,7 +241,7 @@ impl FATManager {
     }
     /// 创建文件系统时调用, 很多阴逼文件系统关闭时不回写, 泪目
     pub fn recalculate_fsinfo(&mut self) {
-        let mut cluster_id = START_CLUS_ID;
+        let mut cluster_id; // = START_CLUS_ID;
         // let mut num = 0;
         let end_cluster = self.bpb.total_clusters() as usize + START_CLUS_ID;
         // all_free clusters

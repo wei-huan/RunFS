@@ -194,15 +194,19 @@ impl VFile {
                 |short_entry: &ShortDirectoryEntry| entry = *short_entry,
             );
         }
-        let size = entry.write_at(offset, buf, &self.fs);
-        if self.is_file() {
+        // TODO: adjust size
+        let write_size = entry.write_at(offset, buf, &self.fs);
+        let old_size = self.size();
+        if self.is_file() && write_size + offset > old_size {
             self.fs.read().data_manager_modify().modify_short_dirent(
                 self.short_cluster,
                 self.short_offset,
-                |short_entry: &mut ShortDirectoryEntry| short_entry.set_size(size as u32),
+                |short_entry: &mut ShortDirectoryEntry| {
+                    short_entry.set_size((write_size + offset) as u32)
+                },
             );
         }
-        size
+        write_size
     }
     /// 长文件名方式搜索, 只支持本级搜索, 不支持递归搜索
     fn find_long_name(&self, name: &str, dir_entry: &ShortDirectoryEntry) -> Option<VFile> {
@@ -500,7 +504,7 @@ impl VFile {
     }
     /// 在当前目录下创建文件或目录
     pub fn create(&self, filename: &str, attribute: FileAttributes) -> Option<Arc<VFile>> {
-        // 判断是否是文件夹
+        // 判断是否是在文件夹中创建
         assert!(self.is_dir());
         /* 如果已经存在了就返回 None */
         if self.is_already_exist(filename, attribute) {
@@ -552,6 +556,7 @@ impl VFile {
         );
         // 检查文件是否创建成功
         let vfile = self.find_vfile_byname(filename).unwrap();
+        // vfile.write_at(0, &name);
         // 如果是目录类型，需要创建 .和 ..(根目录不需要, 但显然不会去创建根目录)
         if attribute.contains(FileAttributes::DIRECTORY) {
             let dot: [u8; SHORT_NAME_LEN] = generate_short_name(".");
