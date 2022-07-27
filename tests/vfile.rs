@@ -163,7 +163,7 @@ fn test_read_file() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let file = root_dir.find_vfile_byname("initproc").unwrap();
+    let file = root_dir.find_vfile_byname("user_shell").unwrap();
     let mut buf = [0u8; 137000];
     let start = Instant::now();
     let len = file.read_at(0, &mut buf);
