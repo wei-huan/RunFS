@@ -119,9 +119,8 @@ fn test_read_clusters() {
     let cluster_size: usize = bpb.cluster_size();
     let mut buffer: Box<[u8]> = vec![0u8; cluster_size].into_boxed_slice();
     let now = Instant::now();
-    for i in 2..502 {
+    for i in 2..1002 {
         data_manager.read_cluster(i, &mut buffer);
-        // println!("buffer after read: {:X?}", buffer);
     }
     let elapsed = now.elapsed();
     println!("Time elapsed in expensive_function() is: {:?}", elapsed);
