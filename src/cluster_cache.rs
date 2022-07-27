@@ -50,12 +50,12 @@ impl ClusterCache {
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-    // pub fn cache_ref(&self) -> &[u8] {
-    //     &self.cache
-    // }
-    // pub fn cache_mut(&mut self) -> &mut [u8] {
-    //     &mut self.cache
-    // }
+    pub fn cache_ref(&self) -> &[u8] {
+        &self.cache
+    }
+    pub fn cache_mut(&mut self) -> &mut [u8] {
+        &mut self.cache
+    }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
@@ -119,7 +119,7 @@ impl Drop for ClusterCache {
 }
 
 pub struct ClusterCacheManager {
-    bpb: Arc<BiosParameterBlock>,
+    pub bpb: Arc<BiosParameterBlock>,
     block_device: Arc<dyn BlockDevice>,
     queue: VecDeque<(usize, Arc<RwLock<ClusterCache>>)>,
 }

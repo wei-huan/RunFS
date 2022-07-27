@@ -5,6 +5,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{prelude::*, Seek, SeekFrom};
 use std::sync::Arc;
+use std::time::Instant;
 
 struct FileEmulateBlockDevice {
     path: String,
@@ -50,7 +51,6 @@ impl BlockDevice for FileEmulateBlockDevice {
     }
 }
 
-// const IMG: &str = "assets/fat32_1.img";
 const IMG: &str = "/dev/sda";
 
 #[test]
@@ -160,12 +160,11 @@ fn test_create_file_in_subdir() {
 
 #[test]
 fn test_read_file() {
-    use std::time::Instant;
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = Arc::new(RwLock::new(RunFileSystem::new(Arc::new(file_block_device))));
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
-    let text = root_dir.find_vfile_byname("open").unwrap();
-    let mut buf = [0u8; 62400];
+    let text = root_dir.find_vfile_byname("user_shell").unwrap();
+    let mut buf = [0u8; 137000];
     let start = Instant::now();
     let len = text.read_at(0, &mut buf);
     let duration = start.elapsed();
@@ -183,10 +182,12 @@ fn test_write_file() {
     let root_dir: Arc<VFile> = Arc::new(runfs.read().root_vfile(&runfs));
     let mut buf = [0x0u8; 130000];
     let text = root_dir.find_vfile_byname("user_shell").unwrap();
+    let start = Instant::now();
     let len = text.read_at(0, &mut buf);
+    let duration = start.elapsed();
+    println!("Time elapsed is: {:?}", duration);
     println!("text read len: {:#}", len);
     let helloworld = root_dir.find_vfile_byname("helloworld.txt").unwrap();
-    println!("Here0");
     let len = helloworld.write_at(0, &buf);
     println!("helloworld write len: {:#}", len);
     let mut buf1 = [0u8; 52];

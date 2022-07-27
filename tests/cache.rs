@@ -99,14 +99,16 @@ fn test_clear_cluster() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = RunFileSystem::new(Arc::new(file_block_device));
     let fat_manager = runfs.fat_manager_read();
-    let next = fat_manager.fsinfo().next_free_cluster();
+    let next = fat_manager.fsinfo().next_free_cluster().unwrap() as usize;
     println!("next: {:#X?}", next);
+    let bpb = runfs.bpb();
     let mut data_manager = runfs.data_manager_modify();
-    let mut buffer = [0u8; 512];
-    data_manager.read_cluster(next.unwrap() as usize, &mut buffer);
+    let cluster_size: usize = bpb.cluster_size();
+    let mut buffer: Box<[u8]> = vec![0u8; cluster_size].into_boxed_slice();
+    data_manager.read_cluster(next, &mut buffer);
     println!("buffer before clear: {:X?}", buffer);
-    data_manager.clear_cluster(next.unwrap() as usize);
-    data_manager.read_cluster(next.unwrap() as usize, &mut buffer);
+    data_manager.clear_cluster(next);
+    data_manager.read_cluster(next, &mut buffer);
     println!("buffer after clear: {:X?}", buffer);
 }
 
@@ -130,6 +132,7 @@ fn test_read_clusters() {
 fn test_fs_alloc_cluster() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let mut runfs = RunFileSystem::new(Arc::new(file_block_device));
+    let bpb = runfs.bpb();
     let fat_manager = runfs.fat_manager_modify();
     let available = fat_manager.fsinfo().free_clusters();
     println!("available: {:#X?}", available);
@@ -138,7 +141,8 @@ fn test_fs_alloc_cluster() {
     drop(fat_manager);
     let id = runfs.alloc_cluster(None).unwrap();
     println!("id: {:#X?}", id);
-    let mut buffer = [12u8; 512];
+    let cluster_size: usize = bpb.cluster_size();
+    let mut buffer: Box<[u8]> = vec![0x12u8; cluster_size].into_boxed_slice();
     let mut data_manager = runfs.data_manager_modify();
     data_manager.read_cluster(id as usize, &mut buffer);
     println!("buffer after clear: {:X?}", buffer);

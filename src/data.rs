@@ -26,28 +26,51 @@ impl DataManager {
     pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
         self.root_dirent.clone()
     }
+    // /// buf 长度必须比簇 cache 大
+    // pub fn read_cluster(&mut self, cluster_id: usize, buf: &mut [u8]) {
+    //     let cache = self.cluster_cache.get_cache(cluster_id);
+    //     let len = cache.read().len();
+    //     for i in 0..len {
+    //         cache.write().read(i, |d: &u8| buf[i] = *d);
+    //     }
+    // }
+    // /// buf 长度必须比簇 cache 大
+    // pub fn write_cluster(&mut self, cluster_id: usize, buf: &[u8]) {
+    //     let cache = self.cluster_cache.get_cache(cluster_id);
+    //     let len = cache.read().len();
+    //     for i in 0..len {
+    //         cache.write().modify(i, |d: &mut u8| *d = buf[i]);
+    //     }
+    // }
+
     /// buf 长度必须比簇 cache 大
     pub fn read_cluster(&mut self, cluster_id: usize, buf: &mut [u8]) {
         let cache = self.cluster_cache.get_cache(cluster_id);
-        let len = cache.read().len();
-        for i in 0..len {
-            cache.write().read(i, |d: &u8| buf[i] = *d);
+        let usize_size = core::mem::size_of::<usize>();
+        let usize_len = cache.read().len() / usize_size;
+        for i in 0..usize_len {
+            cache.write().read(i * usize_size, |d: &usize| unsafe {
+                *(&buf[i * usize_size] as *const u8 as usize as *mut usize) = *d;
+            });
         }
     }
     /// buf 长度必须比簇 cache 大
     pub fn write_cluster(&mut self, cluster_id: usize, buf: &[u8]) {
         let cache = self.cluster_cache.get_cache(cluster_id);
-        let len = cache.read().len();
-        for i in 0..len {
-            cache.write().modify(i, |d: &mut u8| *d = buf[i]);
+        let usize_size = core::mem::size_of::<usize>();
+        let usize_len = cache.read().len() / usize_size;
+        for i in 0..usize_len {
+            cache.write().modify(i * usize_size, |d: &mut usize| {
+                *d = unsafe { *(&buf[i * usize_size] as *const u8 as usize as *const usize) }
+            });
         }
     }
     pub fn clear_cluster(&mut self, cluster_id: usize) {
         let cache = self.cluster_cache.get_cache(cluster_id);
-        let u32_size = core::mem::size_of::<u32>();
-        let u32_len = cache.read().len() / u32_size;
-        for i in 0..u32_len {
-            cache.write().modify(i * u32_size, |d: &mut u32| *d = 0);
+        let usize_size = core::mem::size_of::<usize>();
+        let usize_len = cache.read().len() / usize_size;
+        for i in 0..usize_len {
+            cache.write().modify(i * usize_size, |d: &mut usize| *d = 0);
         }
     }
     pub fn read_cluster_at<T, V>(
@@ -108,6 +131,7 @@ impl DataManager {
         self.write_cluster_at(cluster_id, offset, f)
     }
 }
+
 
 // impl Drop for DataManager {
 //     fn drop(&mut self) {
