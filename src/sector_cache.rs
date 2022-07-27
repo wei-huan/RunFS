@@ -1,15 +1,15 @@
 /// 块缓存层，用于 FAT32 的保留扇区和 FAT 表区
 use super::{BiosParameterBlock, BlockDevice};
-use crate::config::{INFOSEC_CACHE_SZ, MAX_SEC_SZ};
+use crate::config::INFOSEC_CACHE_SZ;
 #[cfg(not(feature = "std"))]
-use alloc::{collections::VecDeque, sync::Arc, vec, vec::Vec};
-#[cfg(feature = "std")]
-use std::{collections::VecDeque, sync::Arc};
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec};
 use spin::RwLock;
+#[cfg(feature = "std")]
+use std::{boxed::Box, collections::VecDeque, sync::Arc};
 
 // 在本系统设计中, BlockCache 块缓存被认为是硬件存储的最小分配单元,逻辑上来说不是文件系统读取的最小单位.
 pub struct BlockCache {
-    cache: Vec<u8>,
+    cache: Box<[u8]>,
     sector_id: usize,
     modified: bool,
     bpb: Arc<BiosParameterBlock>,
@@ -22,16 +22,14 @@ impl BlockCache {
         block_dev: Arc<dyn BlockDevice>,
         bpb: Arc<BiosParameterBlock>,
     ) -> Self {
-        let data_start_sector: usize = bpb.first_data_sector().try_into().unwrap();
-        let sector_size: usize = bpb.bytes_per_sector().try_into().unwrap();
-        assert!(sector_id < data_start_sector, "sector id not in info range");
-        let mut cache: Vec<u8> = vec![0; MAX_SEC_SZ];
+        let data_start_sector: usize = bpb.first_data_sector() as usize;
+        let sector_size: usize = bpb.bytes_per_sector() as usize;
+        assert!(
+            sector_id < data_start_sector,
+            "Sector id is not in info range"
+        );
+        let mut cache: Box<[u8]> = vec![0; sector_size].into_boxed_slice();
         block_dev.read_block(sector_id, &mut cache).unwrap();
-        // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
-        cache.resize_with(sector_size, Default::default);
-        cache.shrink_to(sector_size);
-        // println!("cache.len: {}", cache.len());
-        // println!("cache.capacity: {}", cache.capacity());
         assert!(
             cache.len() == sector_size,
             "sector cache len cannot be shrink to proper size"

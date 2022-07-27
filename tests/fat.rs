@@ -50,7 +50,7 @@ impl BlockDevice for FileEmulateBlockDevice {
 }
 
 const CLUSTER_ID: usize = 2;
-const IMG: &str = "assets/fat32_1.img";
+const IMG: &str = "/dev/sda";
 
 #[test]
 fn read_fat() {

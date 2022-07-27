@@ -1,5 +1,4 @@
 #![allow(unused)]
-// #![feature(asm)]
 
 use core::arch::asm;
 

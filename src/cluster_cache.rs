@@ -1,14 +1,14 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
 use super::{BiosParameterBlock, BlockDevice, START_CLUS_ID};
-use crate::config::{DATACLU_CACHE_SZ, MAX_CLUS_SZ};
+use crate::config::DATACLU_CACHE_SZ;
 #[cfg(not(feature = "std"))]
-use alloc::{collections::VecDeque, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec};
 use spin::RwLock;
 #[cfg(feature = "std")]
-use std::{collections::VecDeque, sync::Arc};
+use std::{boxed::Box, collections::VecDeque, sync::Arc};
 
 pub struct ClusterCache {
-    cache: Vec<u8>,
+    cache: Box<[u8]>,
     cluster_id: usize, // cluster_id 是数据区的簇号, 一般从 2 开始标号
     modified: bool,
     bpb: Arc<BiosParameterBlock>,
@@ -28,24 +28,17 @@ impl ClusterCache {
             "cluster id {} not in data range ",
             cluster_id
         );
-        let sectors_per_cluster: usize = bpb.sectors_per_cluster().try_into().unwrap();
-        let data_start_sector: usize = bpb.first_data_sector().try_into().unwrap();
-        let sector_size: usize = bpb.bytes_per_sector().try_into().unwrap();
-        let mut cache: Vec<u8> = vec![0; MAX_CLUS_SZ];
+        let sectors_per_cluster: usize = bpb.sectors_per_cluster() as usize;
+        let data_start_sector: usize = bpb.first_data_sector() as usize;
+        let sector_size: usize = bpb.bytes_per_sector() as usize;
+        let cluster_size: usize = bpb.cluster_size() as usize;
+        let mut cache: Box<[u8]> = vec![0; cluster_size].into_boxed_slice();
         let block_id = (cluster_id - START_CLUS_ID) * sectors_per_cluster + data_start_sector;
-        let cluster_size: usize = bpb.cluster_size().try_into().unwrap();
         for (i, id) in (block_id..(block_id + sectors_per_cluster)).enumerate() {
             block_dev
                 .read_block(id, &mut cache[(i * sector_size)..((i + 1) * sector_size)])
                 .unwrap();
         }
-        // 先占后缩,适配尽可能宽的簇大小范围,同时避免空间不够用
-        cache.resize_with(cluster_size, Default::default);
-        cache.shrink_to(cluster_size);
-        assert!(
-            cache.capacity() == cluster_size,
-            "cluster cache len cannot be shrink to proper size"
-        );
         Self {
             cache,
             cluster_id,

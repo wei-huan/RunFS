@@ -4,6 +4,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{prelude::*, Seek, SeekFrom};
 use std::sync::Arc;
+use std::time::Instant;
 
 struct FileEmulateBlockDevice {
     path: String,
@@ -50,10 +51,10 @@ impl BlockDevice for FileEmulateBlockDevice {
 }
 
 const CLUSTER_ID: usize = 2;
-const IMG: &str = "assets/fat32_1.img";
+const IMG: &str = "/dev/sda";
 
 #[test]
-fn read_entry() {
+fn test_read_entry() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
     let runfs = RunFileSystem::new(Arc::new(file_block_device));
     let mut fat_manager = runfs.fat_manager_modify();
@@ -107,6 +108,23 @@ fn test_clear_cluster() {
     data_manager.clear_cluster(next.unwrap() as usize);
     data_manager.read_cluster(next.unwrap() as usize, &mut buffer);
     println!("buffer after clear: {:X?}", buffer);
+}
+
+#[test]
+fn test_read_clusters() {
+    let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
+    let runfs = RunFileSystem::new(Arc::new(file_block_device));
+    let mut data_manager = runfs.data_manager_modify();
+    let bpb = runfs.bpb();
+    let cluster_size: usize = bpb.cluster_size();
+    let mut buffer: Box<[u8]> = vec![0u8; cluster_size].into_boxed_slice();
+    let now = Instant::now();
+    for i in 2..502 {
+        data_manager.read_cluster(i, &mut buffer);
+        // println!("buffer after read: {:X?}", buffer);
+    }
+    let elapsed = now.elapsed();
+    println!("Time elapsed in expensive_function() is: {:?}", elapsed);
 }
 
 #[test]

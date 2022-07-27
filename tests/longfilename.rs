@@ -49,7 +49,7 @@ impl BlockDevice for FileEmulateBlockDevice {
     }
 }
 
-const IMG: &str = "../fat32_1.img";
+const IMG: &str = "/dev/sda";
 #[test]
 fn check_boot_sector() {
     let file_block_device: FileEmulateBlockDevice = FileEmulateBlockDevice::new(IMG.to_string());
