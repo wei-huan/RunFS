@@ -26,6 +26,7 @@ impl DataManager {
     pub fn root_dirent(&self) -> Arc<RwLock<ShortDirectoryEntry>> {
         self.root_dirent.clone()
     }
+
     // /// buf 长度必须比簇 cache 大
     // pub fn read_cluster(&mut self, cluster_id: usize, buf: &mut [u8]) {
     //     let cache = self.cluster_cache.get_cache(cluster_id);
@@ -78,10 +79,7 @@ impl DataManager {
         cluster_id: usize,
         offset: usize,
         f: impl FnOnce(&T) -> V,
-    ) -> V
-// where
-    //     T: ?Sized,
-    {
+    ) -> V {
         let cache = self.cluster_cache.get_cache(cluster_id);
         let cache_read = cache.read();
         let cache_ref = cache_read.get_ref(offset);
@@ -98,6 +96,17 @@ impl DataManager {
         let cache_mut = cache_write.get_mut(offset);
         f(cache_mut)
     }
+
+    pub fn copy_cluster_at(&mut self, cluster_id: usize, offset: usize, buf: &mut [u8]) {
+        let cache = self.cluster_cache.get_cache(cluster_id);
+        let cluster_size = self.cluster_cache.bpb.cluster_size() as usize;
+        assert!(offset < cluster_size);
+        let len = buf.len().min(cluster_size - offset);
+        let cache_read = cache.read();
+        let cache_ref = cache_read.cache_ref_offset(offset, len);
+        buf.copy_from_slice(cache_ref);
+    }
+
     pub fn read_short_dirent<V>(
         &mut self,
         cluster_id: usize,
@@ -131,7 +140,6 @@ impl DataManager {
         self.write_cluster_at(cluster_id, offset, f)
     }
 }
-
 
 // impl Drop for DataManager {
 //     fn drop(&mut self) {

@@ -242,9 +242,9 @@ impl ShortDirectoryEntry {
         runfs: &Arc<RwLock<RunFileSystem>>,
     ) -> usize {
         // println!("1-0-0-0");
-        let cluster_size = runfs.read().bpb().cluster_size();
         let mut current_offset = offset;
         let mut size = self.size as usize;
+        let cluster_size = runfs.read().bpb().cluster_size();
         // 计算文件夹占用的空间
         if self.is_dir() {
             size = cluster_size
@@ -254,7 +254,6 @@ impl ShortDirectoryEntry {
                     .count_clusters(self.first_cluster() as usize);
         }
         // println!("read_at size = {}", size);
-        // println!("1-0-0-1");
         let offset_end_pos = (offset + buf.len()).min(size);
         // println!(
         //     "read_at current_offset = {}; offset_end_pos = {}",
@@ -272,24 +271,31 @@ impl ShortDirectoryEntry {
         // println!("current_cluster: {}", current_cluster);
         let mut read_size = 0usize;
         loop {
-            // println!("1-0-0-3");
+            // println!("1-0-0-3 read_size: {}", read_size);
             // 将偏移量向上对齐簇大小
             let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
             current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
             // println!("current_cluster_end_pos = {}", current_cluster_end_pos);
             // 开始读
             let cluster_read_size = current_cluster_end_pos - current_offset;
+            // println!("cluster_read_size = {}", cluster_read_size);
             let offset_in_cluster = current_offset % cluster_size;
+            // println!("offset_in_cluster = {}", offset_in_cluster);
             let dst = &mut buf[read_size..read_size + cluster_read_size];
-            for i in 0..cluster_read_size {
-                runfs.read().data_manager_modify().read_cluster_at(
-                    current_cluster,
-                    offset_in_cluster + i,
-                    |data: &u8| {
-                        dst[i] = *data;
-                    },
-                );
-            }
+            runfs.read().data_manager_modify().copy_cluster_at(
+                current_cluster,
+                offset_in_cluster,
+                dst,
+            );
+            // for i in 0..cluster_read_size {
+            //     runfs.read().data_manager_modify().read_cluster_at(
+            //         current_cluster,
+            //         offset_in_cluster + i,
+            //         |data: &u8| {
+            //             dst[i] = *data;
+            //         },
+            //     );
+            // }
             // println!("1-0-0-4");
             // 更新读取长度
             read_size += cluster_read_size;

@@ -169,6 +169,7 @@ impl VFile {
     }
     pub fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
         let mut entry = ShortDirectoryEntry::default();
+        // 获取文件目录项
         if self.is_root() {
             entry = self.fs.read().root_dirent();
         } else {
@@ -178,6 +179,7 @@ impl VFile {
                 |short_entry: &ShortDirectoryEntry| entry = *short_entry,
             );
         }
+        // 从目录项读文件
         entry.read_at(offset, buf, &self.fs)
     }
     pub fn write_at(&self, offset: usize, buf: &[u8]) -> usize {

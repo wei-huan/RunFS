@@ -50,12 +50,20 @@ impl ClusterCache {
     pub fn len(&self) -> usize {
         self.cache.len()
     }
-    pub fn cache_ref(&self) -> &[u8] {
-        &self.cache
+    // pub fn cache_ref(&self) -> &[u8] {
+    //     &self.cache
+    // }
+    // pub fn cache_mut(&mut self) -> &mut [u8] {
+    //     &mut self.cache
+    // }
+    pub fn cache_ref_offset(&self, offset: usize, len: usize) -> &[u8] {
+        let cluster_size: usize = self.bpb.cluster_size().try_into().unwrap();
+        assert!(offset + len <= cluster_size);
+        &self.cache[offset..offset + len]
     }
-    pub fn cache_mut(&mut self) -> &mut [u8] {
-        &mut self.cache
-    }
+    // pub fn cache_mut_offset(&mut self, offset: usize) -> &mut [u8] {
+    //     &mut self.cache[offset..]
+    // }
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
