@@ -42,6 +42,7 @@ impl RunFileSystem {
             [0x20, 0x20, 0x20],
             FileAttributes::DIRECTORY,
             bpb.root_dir_cluster(),
+            0
         );
         let fat_manager = Arc::new(RwLock::new(FATManager::new(
             fsinfo,

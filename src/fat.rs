@@ -241,17 +241,17 @@ impl FATManager {
     }
     /// 创建文件系统时调用, 很多阴逼文件系统关闭时不回写, 泪目
     pub fn recalculate_fsinfo(&mut self) {
-        let mut cluster_id; // = START_CLUS_ID;
-        // let mut num = 0;
+        let mut cluster_id = START_CLUS_ID;
         let end_cluster = self.bpb.total_clusters() as usize + START_CLUS_ID;
         // all_free clusters
-        // while cluster_id < end_cluster {
-        //     if self.entry(cluster_id) == FATEntry::Free {
-        //         num += 1;
-        //     }
-        //     cluster_id += 1;
-        // }
-        // self.fsinfo.set_free_cluster_count(Some(num));
+        let mut num = 0;
+        while cluster_id < end_cluster {
+            if self.entry(cluster_id) == FATEntry::Free {
+                num += 1;
+            }
+            cluster_id += 1;
+        }
+        self.fsinfo.set_free_cluster_count(Some(num));
         // next
         if let Some(next) = self.fsinfo.next_free_cluster() {
             if self.entry(next as usize) != FATEntry::Free {

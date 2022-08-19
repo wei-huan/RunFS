@@ -6,6 +6,8 @@ use alloc::sync::Arc;
 use spin::RwLock;
 #[cfg(feature = "std")]
 use std::sync::Arc;
+// #[cfg(not(feature = "std"))]
+// use crate::println;
 
 pub struct DataManager {
     root_dirent: Arc<RwLock<ShortDirectoryEntry>>, // root entry, logic entry for / directory
@@ -98,7 +100,9 @@ impl DataManager {
     }
 
     pub fn read_copy_cluster_at(&mut self, cluster_id: usize, offset: usize, buf: &mut [u8]) {
+        // println!("read_copy_cluster_at here0");
         let cache = self.cluster_cache.get_cache(cluster_id);
+        // println!("read_copy_cluster_at here1");
         let cluster_size = self.cluster_cache.bpb.cluster_size() as usize;
         assert!(offset < cluster_size);
         let len = buf.len().min(cluster_size - offset);
@@ -111,9 +115,9 @@ impl DataManager {
         let cache = self.cluster_cache.get_cache(cluster_id);
         let cluster_size = self.cluster_cache.bpb.cluster_size() as usize;
         assert!(offset < cluster_size);
-        println!("offset: {}", offset);
+        // println!("offset: {}", offset);
         let len = buf.len().min(cluster_size - offset);
-        println!("len: {}", len);
+        // println!("len: {}", len);
         let mut cache_write = cache.write();
         let cache_mut = cache_write.cache_mut_offset(offset, len);
         cache_mut.copy_from_slice(buf);

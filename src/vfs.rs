@@ -4,8 +4,8 @@ use super::{
     LAST_LONG_ENTRY, LONG_NAME_LEN, SHORT_FILE_EXT_LEN, SHORT_FILE_NAME_LEN,
     SHORT_FILE_NAME_PADDING, SHORT_NAME_LEN,
 };
-#[cfg(not(feature = "std"))]
-use crate::println;
+// #[cfg(not(feature = "std"))]
+// use crate::println;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, sync::Arc, vec::Vec};
 use spin::RwLock;
@@ -40,16 +40,33 @@ fn copy_short_name_part(dst: &mut [u8], src: &str) -> (usize, bool, bool) {
             return (dst_pos, false, lossy_conv);
         }
         // Make sure character is allowed in 8.3 name
-        #[rustfmt::skip]
+        // #[rustfmt::skip]
         let fixed_c = match c {
             // strip spaces and dots
             ' ' | '.' => {
                 lossy_conv = true;
                 continue;
-            },
+            }
             // copy allowed characters
-            'A'..='Z' | 'a'..='z' | '0'..='9'
-            | '!' | '#' | '$' | '%' | '&' | '\'' | '(' | ')' | '-' | '@' | '^' | '_' | '`' | '{' | '}' | '~' => c,
+            'A'..='Z'
+            | 'a'..='z'
+            | '0'..='9'
+            | '!'
+            | '#'
+            | '$'
+            | '%'
+            | '&'
+            | '\''
+            | '('
+            | ')'
+            | '-'
+            | '@'
+            | '^'
+            | '_'
+            | '`'
+            | '{'
+            | '}'
+            | '~' => c,
             // replace disallowed characters by underscore
             _ => '_',
         };
@@ -358,20 +375,18 @@ impl VFile {
         }
         // 如果第一个串为空, 说明是绝对路径
         if pathv[0] == "" {
-            // println!("here0");
             let mut current_vfile = self.fs.read().root_vfile(&self.fs);
             for i in 1..len {
-                // println!("here1");
                 if pathv[i] == "" || pathv[i] == "." {
                     continue;
                 }
+                // println!("find_vfile_bypath find name: {}", pathv[i]);
                 if let Some(vfile) = current_vfile.find_vfile_byname(pathv[i]) {
                     current_vfile = vfile;
                 } else {
                     return None;
                 }
             }
-            // println!("here100");
             Some(Arc::new(current_vfile))
         }
         // 如果第一个串不为空, 说明是相对路径
@@ -529,10 +544,22 @@ impl VFile {
         name.copy_from_slice(&short_name[0..SHORT_FILE_NAME_LEN]);
         let mut ext = [0u8; SHORT_FILE_EXT_LEN];
         ext.copy_from_slice(&short_name[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
+        let cluster_size = self.fs.read().bpb().cluster_size();
         // 给文件或文件夹分配空间
-        let first_data_cluster = self.fs.write().alloc_cluster(None).unwrap();
+        let allocate_clusters = if filename == "XXX" {
+            0x100000 / cluster_size
+        } else {
+            1
+        };
+        let first_data_cluster = self
+            .fs
+            .write()
+            .alloc_clusters(allocate_clusters, None)
+            .unwrap();
+        let size = allocate_clusters * cluster_size;
         // println!("first_data_cluster: {}", first_data_cluster);
-        let short_entry = ShortDirectoryEntry::new(name, ext, attribute, first_data_cluster);
+        let short_entry =
+            ShortDirectoryEntry::new(name, ext, attribute, first_data_cluster, size as u32);
         let checksum = short_entry.checksum();
         // println!("long_entry_num: {}", long_entry_num);
         // 写长目录项
@@ -556,26 +583,31 @@ impl VFile {
         );
         // 检查文件是否创建成功
         let vfile = self.find_vfile_byname(filename).unwrap();
-        // vfile.write_at(0, &name);
         // 如果是目录类型，需要创建 .和 ..(根目录不需要, 但显然不会去创建根目录)
         if attribute.contains(FileAttributes::DIRECTORY) {
             let dot: [u8; SHORT_NAME_LEN] = generate_short_name(".");
             name.copy_from_slice(&dot[0..SHORT_FILE_NAME_LEN]);
             ext.copy_from_slice(&dot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
-            let self_dir =
-                ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY, first_data_cluster);
+            let self_dir = ShortDirectoryEntry::new(
+                name,
+                ext,
+                FileAttributes::DIRECTORY,
+                first_data_cluster,
+                size as u32,
+            );
             let dotdot: [u8; SHORT_NAME_LEN] = generate_short_name("..");
             name.copy_from_slice(&dotdot[0..SHORT_FILE_NAME_LEN]);
             ext.copy_from_slice(&dotdot[SHORT_FILE_NAME_LEN..SHORT_NAME_LEN]);
             let parent_dir;
             if self.is_root() {
-                parent_dir = ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY, 0);
+                parent_dir = ShortDirectoryEntry::new(name, ext, FileAttributes::DIRECTORY, 0, 0);
             } else {
                 parent_dir = ShortDirectoryEntry::new(
                     name,
                     ext,
                     FileAttributes::DIRECTORY,
                     self.first_data_cluster() as u32,
+                    0,
                 );
             }
             vfile.write_at(0, self_dir.as_bytes());
@@ -678,14 +710,13 @@ impl VFile {
         let first_cluster = short_entry.first_cluster();
         return Some((name, offset, first_cluster, attribute));
     }
-    /// 获取目录中offset处目录项的信息 TODO:之后考虑和stat复用
-    /// 返回<size, atime, mtime, ctime>
+    /// return <size, atime total secs, mtime total secs, ctime total secs>
     pub fn stat(&self) -> (i64, i64, i64, i64, u64) {
         let mut stat = self.fs.read().data_manager_modify().read_short_dirent(
             self.short_cluster,
             self.short_offset,
             |short_entry: &ShortDirectoryEntry| {
-                let (_, _, _, _, _, _, ctime) = short_entry.get_creation_time();
+                let (_, _, _, _, _, _, ctime) = short_entry.creation_time();
                 let (_, _, _, _, _, _, atime) = short_entry.accessed_time();
                 let (_, _, _, _, _, _, mtime) = short_entry.modification_time();
                 let first_clu = short_entry.first_cluster();

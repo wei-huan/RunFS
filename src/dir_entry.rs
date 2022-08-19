@@ -1,4 +1,6 @@
 use super::RunFileSystem;
+// #[cfg(not(feature = "std"))]
+// use crate::println;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, sync::Arc};
 use bitflags::bitflags;
@@ -66,6 +68,7 @@ impl ShortDirectoryEntry {
         extension: [u8; SHORT_FILE_EXT_LEN],
         attribute: FileAttributes,
         first_cluster: u32,
+        size: u32,
     ) -> Self {
         Self {
             name,
@@ -73,6 +76,7 @@ impl ShortDirectoryEntry {
             attribute,
             cluster_low: (first_cluster & 0x0000FFFF) as u16,
             cluster_high: ((first_cluster & 0xFFFF0000) >> 16) as u16,
+            size,
             ..Self::default()
         }
     }
@@ -103,14 +107,14 @@ impl ShortDirectoryEntry {
     pub fn is_short(&self) -> bool {
         !self.attribute.contains(FileAttributes::LONG_NAME)
     }
-    pub fn get_creation_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
+    pub fn creation_time(&self) -> (u32, u32, u32, u32, u32, u32, u64) {
         // year-month-day-Hour-min-sec-long_sec
         let year: u32 = ((self.creation_date & 0xFE00) >> 9) as u32 + 1980;
         let month: u32 = ((self.creation_date & 0x01E0) >> 5) as u32;
         let day: u32 = (self.creation_date & 0x001F) as u32;
         let hour: u32 = ((self.creation_time & 0xF800) >> 11) as u32;
         let min: u32 = ((self.creation_time & 0x07E0) >> 5) as u32;
-        let sec: u32 = ((self.creation_time & 0x001F) << 1) as u32; // 秒数需要*2
+        let sec: u32 = ((self.creation_time & 0x001F) << 1) as u32; // sec need * 2
         let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
             + min * 60
             + sec) as u64;
@@ -123,7 +127,7 @@ impl ShortDirectoryEntry {
         let day: u32 = (self.modification_date & 0x001F) as u32;
         let hour: u32 = ((self.modification_time & 0xF800) >> 11) as u32;
         let min: u32 = ((self.modification_time & 0x07E0) >> 5) as u32;
-        let sec: u32 = ((self.modification_time & 0x001F) << 1) as u32; // 秒数需要*2
+        let sec: u32 = ((self.modification_time & 0x001F) << 1) as u32; // sec need * 2
         let long_sec: u64 = ((((year - START_YEAR) * 365 + month * 30 + day) * 24 + hour) * 3600
             + min * 60
             + sec) as u64;
@@ -235,31 +239,31 @@ impl ShortDirectoryEntry {
         (current_cluster, offset % bytes_per_cluster)
     }
     /// 以偏移量读取, 返回实际读取的长度
+    // BUG: buf len > cluster_size can't read
     pub fn read_at(
         &self,
         offset: usize,
         buf: &mut [u8],
         runfs: &Arc<RwLock<RunFileSystem>>,
     ) -> usize {
-        // println!("1-0-0-0");
         let mut current_offset = offset;
         let mut size = self.size as usize;
         let cluster_size = runfs.read().bpb().cluster_size();
+        // println!("cluster_size size = {}", cluster_size);
         // 计算文件夹占用的空间
         if self.is_dir() {
-            size = cluster_size
-                * runfs
-                    .read()
-                    .fat_manager_modify()
-                    .count_clusters(self.first_cluster() as usize);
+            let cluster_num = runfs
+                .read()
+                .fat_manager_modify()
+                .count_clusters(self.first_cluster() as usize);
+            size = cluster_size * cluster_num;
         }
-        // println!("read_at size = {}", size);
+        // println!("read_at entry size = {}", size);
         let offset_end_pos = (offset + buf.len()).min(size);
         // println!(
         //     "read_at current_offset = {}; offset_end_pos = {}",
         //     current_offset, offset_end_pos
         // );
-        // println!("1-0-0-2");
         if current_offset >= offset_end_pos {
             return 0;
         }
@@ -296,7 +300,6 @@ impl ShortDirectoryEntry {
             //         },
             //     );
             // }
-            // println!("1-0-0-4");
             // 更新读取长度
             read_size += cluster_read_size;
             if current_cluster_end_pos == offset_end_pos {
@@ -314,7 +317,6 @@ impl ShortDirectoryEntry {
             };
         }
         // println!("read_size: {}", read_size);
-        // println!("1-0-0-5");
         read_size
     }
 
@@ -327,27 +329,27 @@ impl ShortDirectoryEntry {
                 .read()
                 .fat_manager_modify()
                 .count_clusters(self.first_cluster() as usize) as usize;
-        println!("write_at size = {}", capacity);
+        // println!("write_at size = {}", capacity);
         let offset_end_pos = (offset + buf.len()).min(capacity);
         if current_offset >= offset_end_pos {
             return 0;
         }
-        println!(
-            "write_at current_offset = {}; offset_end_pos = {}",
-            current_offset, offset_end_pos
-        );
+        // println!(
+        //     "write_at current_offset = {}; offset_end_pos = {}",
+        //     current_offset, offset_end_pos
+        // );
         let (cluster_id, _) = self.pos(offset, runfs);
         let mut current_cluster = match cluster_id {
             None => return 0,
             Some(id) => id,
         };
-        println!("current_cluster = {}", current_cluster);
+        // println!("current_cluster = {}", current_cluster);
         let mut write_size = 0usize;
         loop {
             // 将偏移量向上对齐簇大小
             let mut current_cluster_end_pos = (current_offset / cluster_size + 1) * cluster_size;
             current_cluster_end_pos = current_cluster_end_pos.min(offset_end_pos);
-            println!("current_cluster_end_pos = {}", current_cluster_end_pos);
+            // println!("current_cluster_end_pos = {}", current_cluster_end_pos);
             // 开始写
             let cluster_write_size = current_cluster_end_pos - current_offset;
             // println!("cluster_read_size = {}", cluster_read_size);
@@ -384,7 +386,7 @@ impl ShortDirectoryEntry {
                 Some(id) => id,
             };
         }
-        println!("write_size: {}", write_size);
+        // println!("write_size: {}", write_size);
         write_size
     }
 }

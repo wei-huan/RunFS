@@ -1,6 +1,6 @@
 /// 簇缓存层，扇区的进一步抽象，用于 FAT32 的数据区
 use super::{BiosParameterBlock, BlockDevice, START_CLUS_ID};
-use crate::config::DATACLU_CACHE_SZ;
+use crate::{config::DATACLU_CACHE_SZ};
 #[cfg(not(feature = "std"))]
 use alloc::{boxed::Box, collections::VecDeque, sync::Arc, vec};
 use spin::RwLock;
@@ -146,9 +146,10 @@ impl ClusterCacheManager {
     }
     pub fn get_cache(&mut self, cluster_id: usize) -> Arc<RwLock<ClusterCache>> {
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == cluster_id) {
-            Arc::clone(&pair.1)
+            pair.1.clone()
         } else {
             // substitute
+            // println!("substitute0");
             if self.queue.len() == DATACLU_CACHE_SZ {
                 // from front to tail
                 if let Some((idx, _)) = self
@@ -162,15 +163,18 @@ impl ClusterCacheManager {
                     panic!("Run out of SectorCache!");
                 }
             }
+            // println!("substitute1");
             // load cluster into mem and push back
             let cluster_cache = Arc::new(RwLock::new(ClusterCache::new(
                 cluster_id,
-                Arc::clone(&self.block_device),
-                Arc::clone(&self.bpb),
+                self.block_device.clone(),
+                self.bpb.clone(),
             )));
+            // println!("substitute2");
             self.queue
                 .push_back((cluster_id, Arc::clone(&cluster_cache)));
-            cluster_cache
+            // println!("substitute3");
+            return cluster_cache;
         }
     }
     // pub fn data_cache_sync_all(&mut self) {
